@@ -210,6 +210,27 @@
     background: var(--paper);
     color: var(--charcoal);
   }
+  .file-card .size-row{
+    display:flex;
+    align-items:center;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .file-card .size-select{
+    flex: 1;
+    font-size: 12px;
+    font-family: "Courier New", monospace;
+    border: 1px solid var(--wood-light);
+    border-radius: 3px;
+    padding: 4px 4px;
+    background: var(--paper);
+    color: var(--charcoal);
+  }
+  .file-card .size-x{
+    font-size: 12px;
+    color: #8a7e6c;
+    flex-shrink: 0;
+  }
   .file-card .remove-btn{
     position:absolute;
     top: -10px; right: -10px;
@@ -445,7 +466,7 @@
         <div class="step-num">1</div>
         <div>
           <h2>画像をアップロード</h2>
-          <div class="sub">複数枚まとめてOK。それぞれが別のブロックになります。</div>
+          <div class="sub">複数枚まとめてOK。それぞれが別のブロックになります。サイズ（横×縦のブロック数）も画像ごとに指定できます。</div>
         </div>
       </div>
 
@@ -495,7 +516,12 @@
         </div>
         <div class="preview-note">
           <strong>かたさ・採掘速度は「木材」と同じ</strong>に設定されます。素手でもサクッと壊せて、斧ならさらに速く壊せます。壊すとそのブロック自体がドロップするので、また置き直せます。<br><br>
-          <strong>画像はできるだけぼやけないように</strong>、元画像の解像度に応じてブロックテクスチャの解像度を自動で上げます（最大256×256px）。小さい画像を無理に大きくはしないので、元の画像が高解像度であるほどブロックも綺麗に表示されます。
+          <strong>正面の向きはプレイヤーが置いた方向に合わせて自動で回転</strong>します（前後左右だけでなく、床や天井に置いた場合の上下にも対応）。どちらを向いて置いても、画像はちゃんと自分の方を向きます。<br><br>
+          <strong>ホットバーやインベントリでも画像入りで表示</strong>されます（持っている時や手に取った時も画像が見えます）。<br><br>
+          <strong>サイズは横×縦のブロック数で指定</strong>でき、見た目はその大きさで表示されます（設置に必要なスペース自体は1ブロック分です）。画像はサイズに応じて解像度も自動で上がります。<br><br>
+          <strong>各画像につき2種類のブロックが作られます</strong>：通常の「ブロック」（当たり判定あり、足場として使える）と、「ゴーストブロック」（当たり判定なし、プレイヤーやMobがすり抜けられる）。ゴーストブロックは額縁のように壁や床に画像を貼りたいときに便利です。クリエイティブインベントリにそれぞれ別のブロックとして並びます。<br><br>
+          <span style="color:#9c382a;">※ この機能には Minecraft 統合版 1.21.60 以降が必要です。</span>
+          <span style="color:#9c382a;">※ PCではただし導入されない場合は.zipファイルにしてアドオンのフォルダに入れてください</span>
         </div>
       </div>
 
@@ -638,26 +664,44 @@ function drawFrameTexture(size){
 }
 
 /**
- * アップロード画像を正方形のブロックテクスチャ(中央クロップ＋リサイズ)に変換
+ * アップロード画像を指定のアスペクト比(outW:outH)で中央クロップ＋リサイズしたCanvasを返す
  * @param {HTMLImageElement} img
- * @param {number} size
+ * @param {number} outW 出力の幅(px)
+ * @param {number} outH 出力の高さ(px)
  * @returns {HTMLCanvasElement}
  */
-function drawFrontTexture(img, size){
+function drawFrontTexture(img, outW, outH){
+  if(outH === undefined) outH = outW; // 後方互換: 1引数なら正方形
+
   const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
+  canvas.width = outW;
+  canvas.height = outH;
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
 
   const iw = img.naturalWidth || img.width;
   const ih = img.naturalHeight || img.height;
-  const side = Math.min(iw, ih);
-  const sx = (iw - side) / 2;
-  const sy = (ih - side) / 2;
 
-  ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+  // 出力と同じアスペクト比になるよう中央クロップ
+  const targetRatio = outW / outH;
+  const srcRatio = iw / ih;
+  let sx, sy, sw, sh;
+  if(srcRatio > targetRatio){
+    // 元画像が横長すぎる -> 横を削る
+    sh = ih;
+    sw = ih * targetRatio;
+    sx = (iw - sw) / 2;
+    sy = 0;
+  } else {
+    // 元画像が縦長すぎる -> 縦を削る
+    sw = iw;
+    sh = iw / targetRatio;
+    sx = 0;
+    sy = (ih - sh) / 2;
+  }
+
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outW, outH);
   return canvas;
 }
 
@@ -680,6 +724,102 @@ function canvasToPngBytes(canvas){
 
 
 /* ============================================================
+   カスタムジオメトリ生成
+   横(widthBlocks) x 縦(heightBlocks) ブロック分の大きさを持つ
+   「板」状のジオメトリを作る。奥行きは常に薄い固定値。
+   - 単位は16 = 1ブロック（Bedrockのモデル空間の標準単位）
+   - 正面(north)に画像、他5面に木枠テクスチャを割り当てる
+   - テクスチャは「正面用」「枠用」の2枚を別々に用意し、
+     material_instances側の north / * (up/down/east/west/south) の
+     built-inインスタンス名でそれぞれに紐付ける。
+   - UVは公式のSushiブロックチュートリアルと同じく、シンプルな
+     Box UV形式 ("uv": [0, 0]) を使う。面ごとに別テクスチャ画像を
+     material_instancesで割り当てる場合、UVの数値自体は重要ではなく、
+     各テクスチャ画像はそれぞれ独立して描画されるため、[0,0]で十分。
+   ============================================================ */
+
+const UNITS_PER_BLOCK = 16;
+const PLAQUE_DEPTH = 3; // 奥行き（モデル空間単位。3/16ブロック程度の薄い板）
+
+/**
+ * widthBlocks x heightBlocks の板ジオメトリを構築する。
+ * 当たり判定(collision_box / selection_box)は仕様上 1 グリッド(-8..8, 0..16)を
+ * 超えられないため、見た目はサイズ通りに大きくしつつ、当たり判定は1ブロック分に収める。
+ *
+ * @param {string} geoIdentifier 例: "geometry.myphoto_sunset"
+ * @param {number} widthBlocks 横のブロック数 (1, 2, 3...)
+ * @param {number} heightBlocks 縦のブロック数 (1, 2, 3...)
+ * @returns {object} geo.json の内容（オブジェクト）
+ */
+function buildPlaqueGeometry(geoIdentifier, widthBlocks, heightBlocks){
+  const w = widthBlocks * UNITS_PER_BLOCK;
+  const h = heightBlocks * UNITS_PER_BLOCK;
+  const d = PLAQUE_DEPTH;
+
+  // 中心を原点(ブロックグリッドの中心)に置き、奥行きはブロックの中央付近に配置。
+  // Bedrockのモデル空間: x:[-w/2, w/2], y:[0, h]（縦は0始まり=床基準）, z: north(-) / south(+)
+  const originX = -w / 2;
+  const originY = 0;
+  const originZ = (UNITS_PER_BLOCK - d) / 2;
+
+  // シンプルなBox UV（公式サンプルのSushiブロックと同じ形式）。
+  // 面ごとのテクスチャ画像はBP側のmaterial_instancesで指定するので、ここは[0,0]で十分。
+  const cube = {
+    origin: [originX, originY, originZ],
+    size: [w, h, d],
+    uv: [0, 0]
+  };
+
+  return {
+    format_version: '1.16.0',
+    'minecraft:geometry': [
+      {
+        description: {
+          identifier: geoIdentifier,
+          texture_width: 16,
+          texture_height: 16,
+          visible_bounds_width: Math.max(2, widthBlocks + 1),
+          visible_bounds_height: Math.max(2, heightBlocks + 1),
+          visible_bounds_offset: [0, heightBlocks * 0.5, 0]
+        },
+        bones: [
+          {
+            name: 'plaque',
+            pivot: [0, 0, 0],
+            cubes: [cube]
+          }
+        ]
+      }
+    ]
+  };
+}
+
+/**
+ * 通常ブロック用の当たり判定・選択範囲のボックス。
+ * Bedrockの制約上、collision_box/selection_boxは1ブロックグリッド
+ * (x,z: -8..8 / y: 0..16) からは出られないため、見た目が大きくても
+ * 当たり判定は1ブロック分に固定する。
+ */
+function buildPlaqueBoxes(){
+  return {
+    origin: [-8, 0, -8],
+    size: [16, 16, 16]
+  };
+}
+
+/**
+ * ゴーストブロック用の選択範囲ボックス（当たり判定は別途collision_box:falseにする）。
+ * クリックでの選択・破壊ができるよう、selection_boxだけは通常通り残す。
+ */
+function buildGhostSelectionBox(){
+  return {
+    origin: [-8, 0, -8],
+    size: [16, 16, 16]
+  };
+}
+
+
+/* ============================================================
    .mcaddon ビルダー
    ビヘイビアパック(BP) + リソースパック(RP) を
    それぞれ独立した .mcpack (内部的にはZIP) として作り、
@@ -696,12 +836,13 @@ function uuid(){
   });
 }
 
-const FORMAT_VERSION_BLOCK = '1.21.0';
-const MIN_ENGINE_VERSION = [1, 21, 0];
+// item_visual コンポーネント（インベントリ/手持ち表示用の見た目を別指定する機能）が
+// 安定して使える最低のフォーマットバージョン。
+const FORMAT_VERSION_BLOCK = '1.21.60';
+const MIN_ENGINE_VERSION = [1, 21, 60];
 
 /**
  * テクスチャ解像度に応じて terrain_texture.json の padding / mip を決める。
- * 高解像度になるほどpaddingを大きめに、mipは抑える。
  */
 function terrainTextureTuning(maxTexSize){
   if(maxTexSize >= 128) return { padding: 8, num_mip_levels: 0 };
@@ -710,8 +851,51 @@ function terrainTextureTuning(maxTexSize){
 }
 
 /**
+ * プレイヤーが向いている方向に応じてブロックを回転させるための
+ * 6方向分のpermutationsを作る（north基準でモデルを作っているので、
+ * facing_directionの値に応じてX軸/Y軸回転をかける）。
+ * y_rotation_offset:180 をtraitに設定しているので、水平4方向では
+ * 「プレイヤーが向いている方角 = facing_direction」のとき画像が
+ * プレイヤーの方を向くように180度分のオフセットが既に加味される。
+ * 上面・底面に設置した場合は、プレイヤーが見上げる/見下ろす形で
+ * 画像が見えるようX軸回転を使う。
+ */
+function buildRotationPermutations(){
+  return [
+    // 水平4方向（壁に貼るイメージ。y_rotation_offset:180が効いているので
+    // facing_direction(=プレイヤーの向き)と同じ回転を素直に使う）
+    {
+      condition: "query.block_state('minecraft:facing_direction') == 'north'",
+      components: { 'minecraft:transformation': { rotation: [0, 0, 0] } }
+    },
+    {
+      condition: "query.block_state('minecraft:facing_direction') == 'east'",
+      components: { 'minecraft:transformation': { rotation: [0, 90, 0] } }
+    },
+    {
+      condition: "query.block_state('minecraft:facing_direction') == 'south'",
+      components: { 'minecraft:transformation': { rotation: [0, 180, 0] } }
+    },
+    {
+      condition: "query.block_state('minecraft:facing_direction') == 'west'",
+      components: { 'minecraft:transformation': { rotation: [0, 270, 0] } }
+    },
+    // 床に置いた場合：上を向いて見下ろす形で画像が見えるようにする
+    {
+      condition: "query.block_state('minecraft:facing_direction') == 'up'",
+      components: { 'minecraft:transformation': { rotation: [90, 0, 0] } }
+    },
+    // 天井に置いた場合：下を向いて見上げる形で画像が見えるようにする
+    {
+      condition: "query.block_state('minecraft:facing_direction') == 'down'",
+      components: { 'minecraft:transformation': { rotation: [-90, 0, 0] } }
+    }
+  ];
+}
+
+/**
  * 画像エントリ群とパック設定から .mcaddon の Blob を生成する
- * @param {Array} entries  state.files と同形式の配列
+ * @param {Array} entries  state.files と同形式の配列（widthBlocks/heightBlocksを含む）
  * @param {string} packDisplayName
  * @param {string} namespace
  * @param {(msg:string)=>void} onProgress
@@ -739,11 +923,7 @@ async function buildMcaddon(entries, packDisplayName, namespace, onProgress){
       min_engine_version: MIN_ENGINE_VERSION
     },
     modules: [
-      {
-        type: 'data',
-        uuid: bpUuidModule,
-        version: [1, 0, 0]
-      }
+      { type: 'data', uuid: bpUuidModule, version: [1, 0, 0] }
     ],
     dependencies: [
       { uuid: rpUuidHeader, version: [1, 0, 0] }
@@ -762,33 +942,29 @@ async function buildMcaddon(entries, packDisplayName, namespace, onProgress){
       min_engine_version: MIN_ENGINE_VERSION
     },
     modules: [
-      {
-        type: 'resources',
-        uuid: rpUuidModule,
-        version: [1, 0, 0]
-      }
+      { type: 'resources', uuid: rpUuidModule, version: [1, 0, 0] }
     ]
   };
   rpZip.file('manifest.json', JSON.stringify(rpManifest, null, 2));
 
-  /* ---------- 各画像の解像度を決定（一番大きい画像のサイズを記録しておく） ---------- */
-  let globalMaxTexSize = MIN_TEX_SIZE;
+  /* ---------- 各画像のテクスチャサイズを決定 ---------- */
+  let globalMaxTexSize = MIN_TEX_PER_BLOCK;
   const sizedEntries = entries.map(entry => {
-    const size = resolveTextureSize(entry.img);
-    if(size > globalMaxTexSize) globalMaxTexSize = size;
-    return { entry, texSize: size };
+    const widthBlocks = Math.max(1, Math.min(MAX_BLOCK_SPAN, entry.widthBlocks || 1));
+    const heightBlocks = Math.max(1, Math.min(MAX_BLOCK_SPAN, entry.heightBlocks || 1));
+    const { w: frontW, h: frontH, perBlock } = resolveFrontTextureSize(entry.img, widthBlocks, heightBlocks);
+    if(perBlock > globalMaxTexSize) globalMaxTexSize = perBlock;
+    return { entry, widthBlocks, heightBlocks, frontW, frontH, perBlock };
   });
 
-  /* ---------- 共通: 木枠テクスチャ（全ブロック共通で1枚だけ作る） ----------
-     枠は一番大きい画像の解像度に合わせておく（正面と枠で解像度が違うと
-     アトラス上で違和感が出るため） */
+  /* ---------- 共通: 木枠テクスチャ（全ブロック共通で1枚だけ作る） ---------- */
   const frameCanvas = drawFrameTexture(globalMaxTexSize);
   const framePngBytes = await canvasToPngBytes(frameCanvas);
   rpZip.file('textures/blocks/photo_frame.png', framePngBytes);
 
-  /* ---------- pack_icon（簡易: 1枚目の画像 or 枠デザインを使用） ---------- */
+  /* ---------- pack_icon ---------- */
   const iconSourceImg = entries[0] ? entries[0].img : null;
-  const iconCanvas = iconSourceImg ? drawFrontTexture(iconSourceImg, 64) : drawFrameTexture(64);
+  const iconCanvas = iconSourceImg ? drawFrontTexture(iconSourceImg, 64, 64) : drawFrameTexture(64);
   const iconPngBytes = await canvasToPngBytes(iconCanvas);
   bpZip.file('pack_icon.png', iconPngBytes);
   rpZip.file('pack_icon.png', iconPngBytes);
@@ -802,26 +978,98 @@ async function buildMcaddon(entries, packDisplayName, namespace, onProgress){
     num_mip_levels: tuning.num_mip_levels,
     texture_data: {}
   };
-  const blocksJson = {
-    format_version: '1.19.30'
-  };
+  const blocksJson = { format_version: '1.19.30' };
   const langLines_ja = ['## フォトブロック'];
   const langLines_en = ['## Photo Blocks'];
 
-  let i = 0;
-  for(const { entry, texSize } of sizedEntries){
-    i++;
-    onProgress && onProgress(`ブロックを作成中… (${i}/${entries.length}) ${entry.blockName} (${texSize}x${texSize})`);
+  const rotationPermutations = buildRotationPermutations();
 
-    const blockName = entry.blockName;          // 例: sunset
+  /**
+   * 1個のブロック定義(JSON)を組み立てる。
+   * isGhost=true の場合、当たり判定なし（すり抜けられる）のゴーストブロックになる。
+   */
+  function buildBlockDef(identifier, geoIdentifier, frontTexKey, frameTexKey, blockName, isGhost){
+    const components = {
+      'minecraft:geometry': geoIdentifier,
+      // 面ごとのテクスチャ（built-inの面名で自動的にcubeの各面に紐づく）
+      'minecraft:material_instances': {
+        '*': { texture: frameTexKey, render_method: 'opaque' },
+        up: { texture: frameTexKey, render_method: 'opaque' },
+        down: { texture: frameTexKey, render_method: 'opaque' },
+        east: { texture: frameTexKey, render_method: 'opaque' },
+        west: { texture: frameTexKey, render_method: 'opaque' },
+        south: { texture: frameTexKey, render_method: 'opaque' },
+        north: { texture: frontTexKey, render_method: 'opaque' }
+      },
+      // インベントリ・ホットバー・手持ち表示専用の見た目。
+      // 立方体の全面に正面画像を貼ることで、アイコンとして画像がちゃんと見えるようにする。
+      'minecraft:item_visual': {
+        geometry: 'minecraft:geometry.full_block',
+        material_instances: {
+          '*': { texture: frontTexKey, render_method: 'opaque' }
+        }
+      },
+      'minecraft:destructible_by_mining': { seconds_to_destroy: 2.0 },
+      'minecraft:destructible_by_explosion': { explosion_resistance: 3.0 },
+      'minecraft:flammable': { catch_chance_modifier: 5, destroy_chance_modifier: 20 },
+      'minecraft:map_color': '#8b6f47',
+      'minecraft:loot': `loot_tables/blocks/${blockName}${isGhost ? '_ghost' : ''}.json`,
+      'tag:minecraft:is_axe_item_destructible': {}
+    };
+
+    if(isGhost){
+      // 当たり判定なし（プレイヤーやMobがすり抜けられる）。選択範囲だけは
+      // 残し、クリックでの選択・破壊はできるようにする。
+      components['minecraft:collision_box'] = false;
+      components['minecraft:selection_box'] = buildGhostSelectionBox();
+    } else {
+      const boxes = buildPlaqueBoxes();
+      components['minecraft:collision_box'] = boxes;
+      components['minecraft:selection_box'] = boxes;
+    }
+
+    return {
+      format_version: FORMAT_VERSION_BLOCK,
+      'minecraft:block': {
+        description: {
+          identifier: identifier,
+          menu_category: { category: 'construction' },
+          traits: {
+            'minecraft:placement_direction': {
+              enabled_states: ['minecraft:cardinal_direction', 'minecraft:facing_direction'],
+              y_rotation_offset: 180
+            }
+          }
+        },
+        components: components
+      },
+      permutations: rotationPermutations
+    };
+  }
+
+  let i = 0;
+  for(const sized of sizedEntries){
+    i++;
+    const { entry, widthBlocks, heightBlocks, frontW, frontH, perBlock } = sized;
+    onProgress && onProgress(`ブロックを作成中… (${i}/${entries.length}) ${entry.blockName} (${widthBlocks}x${heightBlocks}ブロック, ${frontW}x${frontH}px)`);
+
+    const blockName = entry.blockName;
     const identifier = `${namespace}:${blockName}`;
+    const ghostIdentifier = `${namespace}:${blockName}_ghost`;
     const frontTexKey = `${namespace}_${blockName}_front`;
     const frameTexKey = `${namespace}_photo_frame`;
+    const geoIdentifier = `geometry.${namespace}_${blockName}`;
 
-    // 正面テクスチャを生成して書き出し（画像自身の解像度に合わせる。アップスケールはしない）
-    const frontCanvas = drawFrontTexture(entry.img, texSize);
+    // 正面テクスチャ（widthBlocks:heightBlocksのアスペクト比で中央クロップ）。
+    // 通常版・ゴースト版で共有する。
+    const frontCanvas = drawFrontTexture(entry.img, frontW, frontH);
     const frontPngBytes = await canvasToPngBytes(frontCanvas);
     rpZip.file(`textures/blocks/${blockName}_front.png`, frontPngBytes);
+
+    // ジオメトリ（横×縦サイズに応じた板状モデル。正面/枠は別テクスチャ）。
+    // 見た目は通常版・ゴースト版で同じものを共有する。
+    const geoJson = buildPlaqueGeometry(geoIdentifier, widthBlocks, heightBlocks);
+    rpZip.file(`models/blocks/${blockName}.geo.json`, JSON.stringify(geoJson, null, 2));
 
     // terrain_texture.json への登録
     terrainTextureData.texture_data[frontTexKey] = {
@@ -833,73 +1081,30 @@ async function buildMcaddon(entries, packDisplayName, namespace, onProgress){
       };
     }
 
-    // blocks.json への登録（サウンド指定。テクスチャの実体はBP側のmaterial_instancesが優先される）
-    blocksJson[identifier] = {
-      sound: 'wood'
-    };
+    blocksJson[identifier] = { sound: 'wood' };
+    blocksJson[ghostIdentifier] = { sound: 'wood' };
 
-    // BP側: ブロック定義 (1ブロック1ファイル)
-    const blockDef = {
-      format_version: FORMAT_VERSION_BLOCK,
-      'minecraft:block': {
-        description: {
-          identifier: identifier,
-          menu_category: {
-            category: 'construction'
-          }
-        },
-        components: {
-          'minecraft:geometry': 'minecraft:geometry.full_block',
-          'minecraft:material_instances': {
-            '*': {
-              texture: frameTexKey,
-              render_method: 'opaque'
-            },
-            north: {
-              texture: frontTexKey,
-              render_method: 'opaque'
-            }
-          },
-          'minecraft:destructible_by_mining': {
-            seconds_to_destroy: 2.0
-          },
-          'minecraft:destructible_by_explosion': {
-            explosion_resistance: 3.0
-          },
-          'minecraft:flammable': {
-            catch_chance_modifier: 5,
-            destroy_chance_modifier: 20
-          },
-          'minecraft:friction': 0.6,
-          'minecraft:map_color': '#8b6f47',
-          'minecraft:loot': `loot_tables/blocks/${blockName}.json`,
-          'tag:minecraft:is_axe_item_destructible': {}
-        }
-      }
-    };
+    // BP側: ブロック定義（通常版・ゴースト版の2つ）
+    const blockDef = buildBlockDef(identifier, geoIdentifier, frontTexKey, frameTexKey, blockName, false);
     bpZip.file(`blocks/${blockName}.json`, JSON.stringify(blockDef, null, 2));
 
-    // BP側: ルートテーブル（壊したらこのブロック自身がドロップ）
-    const lootTable = {
-      pools: [
-        {
-          rolls: 1,
-          entries: [
-            {
-              type: 'item',
-              name: identifier,
-              weight: 1
-            }
-          ]
-        }
-      ]
-    };
-    bpZip.file(`loot_tables/blocks/${blockName}.json`, JSON.stringify(lootTable, null, 2));
+    const ghostBlockDef = buildBlockDef(ghostIdentifier, geoIdentifier, frontTexKey, frameTexKey, blockName, true);
+    bpZip.file(`blocks/${blockName}_ghost.json`, JSON.stringify(ghostBlockDef, null, 2));
 
-    // 言語ファイル用エントリ
+    // BP側: ルートテーブル（壊したらそれぞれ自分自身がドロップ）
+    const lootTableFor = (id) => ({
+      pools: [
+        { rolls: 1, entries: [ { type: 'item', name: id, weight: 1 } ] }
+      ]
+    });
+    bpZip.file(`loot_tables/blocks/${blockName}.json`, JSON.stringify(lootTableFor(identifier), null, 2));
+    bpZip.file(`loot_tables/blocks/${blockName}_ghost.json`, JSON.stringify(lootTableFor(ghostIdentifier), null, 2));
+
     const displayLabel = entry.displayName.replace(/\.[^/.]+$/, '');
     langLines_ja.push(`tile.${identifier}.name=${displayLabel}`);
+    langLines_ja.push(`tile.${ghostIdentifier}.name=${displayLabel}（すり抜け）`);
     langLines_en.push(`tile.${identifier}.name=${displayLabel}`);
+    langLines_en.push(`tile.${ghostIdentifier}.name=${displayLabel} (Ghost)`);
   }
 
   rpZip.file('textures/terrain_texture.json', JSON.stringify(terrainTextureData, null, 2));
@@ -911,14 +1116,9 @@ async function buildMcaddon(entries, packDisplayName, namespace, onProgress){
 
   onProgress && onProgress('パックを圧縮中…');
 
-  // BP/RP をそれぞれ .mcpack (実体はZIP) としてバイナリ化
   const bpPackBytes = await bpZip.generateAsync({ type: 'uint8array', compression: 'DEFLATE', compressionOptions: { level: 6 } });
   const rpPackBytes = await rpZip.generateAsync({ type: 'uint8array', compression: 'DEFLATE', compressionOptions: { level: 6 } });
 
-  // .mcaddon は、その2つの .mcpack を内包する外側のZIP
-  // ファイル名は namespace（半角英数字に正規化済み）をベースにする。
-  // 日本語など非ASCII文字をファイル名に含めると、一部の環境でインポートに
-  // 失敗することがあるため、内部のmcpackファイル名は安全な文字だけにする。
   const safeBase = namespace || 'photoblocks';
   const addonZip = new JSZip();
   addonZip.file(`${safeBase}_behavior.mcpack`, bpPackBytes);
@@ -935,30 +1135,42 @@ async function buildMcaddon(entries, packDisplayName, namespace, onProgress){
    フォトブロック工房 — Bedrock .mcaddon ビルダー
    ============================================================ */
 
-// ブロックテクスチャの解像度は画像ごとに決める（resolveTextureSize参照）。
-// あまりに大きいとアトラスを圧迫するため上限を設ける。
-const MAX_TEX_SIZE = 256;
-const MIN_TEX_SIZE = 16;
+// ブロックテクスチャの解像度は「1ブロックあたり何pxにするか」を画像解像度から決め、
+// 横×縦のブロック数倍した分だけ正面テクスチャの解像度を上げる。
+const MAX_TEX_PER_BLOCK = 256; // 1ブロックあたりの最大解像度
+const MIN_TEX_PER_BLOCK = 16;  // 1ブロックあたりの最小解像度
+const MAX_BLOCK_SPAN = 3;      // 横/縦に置ける最大ブロック数（見た目の大きさ）
 
 /**
- * 元画像の解像度に応じて、ブロックテクスチャに使う最適な正方形サイズ(2の累乗)を決める。
- * 小さい画像を無理に拡大はせず、大きい画像はMAX_TEX_SIZEで頭打ちにする。
+ * 元画像の解像度に応じて、1ブロックあたりのテクスチャ解像度(2の累乗)を決める。
+ * 小さい画像を無理に拡大はせず、大きい画像はMAX_TEX_PER_BLOCKで頭打ちにする。
  */
-function resolveTextureSize(img){
+function resolveTexPerBlock(img){
   const iw = img.naturalWidth || img.width || 16;
   const ih = img.naturalHeight || img.height || 16;
   const shortSide = Math.min(iw, ih);
 
-  // shortSide 以下になる最大の2の累乗を選ぶ（ぼやけさせない＝必要以上に縮小しない）
-  let size = MIN_TEX_SIZE;
-  while(size * 2 <= shortSide && size * 2 <= MAX_TEX_SIZE){
+  let size = MIN_TEX_PER_BLOCK;
+  while(size * 2 <= shortSide && size * 2 <= MAX_TEX_PER_BLOCK){
     size *= 2;
   }
   return size;
 }
 
+/**
+ * 画像とブロックサイズ(横幅・縦幅、ブロック単位)から、
+ * 正面テクスチャに使う実際の解像度(幅, 高さ)を決める。
+ * ブロックが大きいほど、より大きい正面テクスチャを使って描画が崩れないようにする。
+ */
+function resolveFrontTextureSize(img, widthBlocks, heightBlocks){
+  const perBlock = resolveTexPerBlock(img);
+  const w = perBlock * widthBlocks;
+  const h = perBlock * heightBlocks;
+  return { w, h, perBlock };
+}
+
 const state = {
-  files: [] // { id, name(=block id name), file, dataUrl, img }
+  files: [] // { id, name(=block id name), file, dataUrl, img, widthBlocks, heightBlocks }
 };
 
 let uidCounter = 0;
@@ -1047,7 +1259,9 @@ function handleFiles(fileListObj){
         state.files.push({
           id, file, dataUrl, img,
           blockName,
-          displayName: file.name
+          displayName: file.name,
+          widthBlocks: 1,
+          heightBlocks: 1
         });
         renderFileList();
         updateBuildButton();
@@ -1105,13 +1319,57 @@ function renderFileList(){
     const blockId = document.createElement('div');
     blockId.className = 'block-id';
 
+    // サイズ指定（横×縦、ブロック単位）
+    const sizeRow = document.createElement('div');
+    sizeRow.className = 'size-row';
+
+    const widthSelect = document.createElement('select');
+    widthSelect.className = 'size-select';
+    widthSelect.title = '横のブロック数';
+    for(let n = 1; n <= MAX_BLOCK_SPAN; n++){
+      const opt = document.createElement('option');
+      opt.value = n;
+      opt.textContent = `横${n}`;
+      if(n === entry.widthBlocks) opt.selected = true;
+      widthSelect.appendChild(opt);
+    }
+    widthSelect.addEventListener('change', () => {
+      entry.widthBlocks = parseInt(widthSelect.value, 10);
+      updateTexSizeLabel(texSizeLabel, entry);
+      if(state.files[0] === entry) renderBlockPreview();
+    });
+
+    const sizeX = document.createElement('span');
+    sizeX.className = 'size-x';
+    sizeX.textContent = '×';
+
+    const heightSelect = document.createElement('select');
+    heightSelect.className = 'size-select';
+    heightSelect.title = '縦のブロック数';
+    for(let n = 1; n <= MAX_BLOCK_SPAN; n++){
+      const opt = document.createElement('option');
+      opt.value = n;
+      opt.textContent = `縦${n}`;
+      if(n === entry.heightBlocks) opt.selected = true;
+      heightSelect.appendChild(opt);
+    }
+    heightSelect.addEventListener('change', () => {
+      entry.heightBlocks = parseInt(heightSelect.value, 10);
+      updateTexSizeLabel(texSizeLabel, entry);
+      if(state.files[0] === entry) renderBlockPreview();
+    });
+
+    sizeRow.appendChild(widthSelect);
+    sizeRow.appendChild(sizeX);
+    sizeRow.appendChild(heightSelect);
+
     const texSizeLabel = document.createElement('div');
     texSizeLabel.className = 'tex-size-label';
-    const resolvedSize = resolveTextureSize(entry.img);
-    texSizeLabel.textContent = `テクスチャ ${resolvedSize}×${resolvedSize}px`;
+    updateTexSizeLabel(texSizeLabel, entry);
 
     card.appendChild(thumbWrap);
     card.appendChild(nameInput);
+    card.appendChild(sizeRow);
     card.appendChild(blockId);
     card.appendChild(texSizeLabel);
     fileListEl.appendChild(card);
@@ -1119,6 +1377,14 @@ function renderFileList(){
     // namespace変更にも追従させるため、blockIdの文字列は描画時に都度更新
     updateBlockIdLabel(blockId, entry);
   });
+}
+
+function updateTexSizeLabel(el, entry){
+  const { w, h } = resolveFrontTextureSize(entry.img, entry.widthBlocks, entry.heightBlocks);
+  const blockLabel = (entry.widthBlocks === 1 && entry.heightBlocks === 1)
+    ? '1ブロック'
+    : `${entry.widthBlocks}×${entry.heightBlocks}ブロック分`;
+  el.textContent = `${blockLabel} ・ テクスチャ ${w}×${h}px`;
 }
 
 function updateBlockIdLabel(el, entry){
@@ -1153,7 +1419,8 @@ function updateBuildButton(){
     buildBtn.textContent = '画像を追加してください';
   } else {
     buildBtn.disabled = false;
-    buildBtn.textContent = `ビルドする（${state.files.length}個のブロック）`;
+    const blockCount = state.files.length * 2; // 通常版 + ゴースト版
+    buildBtn.textContent = `ビルドする（${state.files.length}枚 → ${blockCount}個のブロック）`;
   }
 }
 
@@ -1236,7 +1503,7 @@ buildBtn.addEventListener('click', async () => {
     downloadLink.href = url;
     downloadLink.download = `${fileBaseName}.mcaddon`;
 
-    buildStatus.textContent = `完成！ ${state.files.length}個のブロックを作成しました。`;
+    buildStatus.textContent = `完成！ ${state.files.length}枚の画像から ${state.files.length * 2}個のブロック（通常版+ゴースト版）を作成しました。`;
     downloadArea.classList.add('show');
   } catch(err){
     console.error(err);
