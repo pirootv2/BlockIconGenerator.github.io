@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>フォトブロック工房 ー 統合版マイクラに自分の画像をブロックとして持ち込む</title>
+<style>
+  :root{
+    --wood-dark:#5b4430;
+    --wood:#8b6f47;
+    --wood-light:#a98a5e;
+    --cream:#efe6d3;
+    --cream-deep:#e3d6ba;
+    --charcoal:#2b2622;
+    --charcoal-soft:#3a332c;
+    --redstone:#c24b3a;
+    --redstone-dark:#9c382a;
+    --leaf:#6b9b4f;
+    --leaf-dark:#52793c;
+    --paper:#fbf6ea;
+    --shadow: 0 10px 30px rgba(43,38,34,0.25);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+
+  body{
+    background: var(--charcoal);
+    background-image:
+      radial-gradient(circle at 15% 0%, rgba(139,111,71,0.18), transparent 45%),
+      radial-gradient(circle at 85% 100%, rgba(108,80,50,0.18), transparent 45%);
+    color: var(--cream);
+    font-family: "Helvetica Neue", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+    line-height: 1.7;
+    min-height: 100vh;
+  }
+
+  .pixel-font{
+    font-family: "Courier New", monospace;
+    letter-spacing: 0.04em;
+  }
+
+  /* ---------- ヘッダー ---------- */
+  header{
+    padding: 64px 24px 40px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .eyebrow{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--wood-light);
+    background: rgba(139,111,71,0.15);
+    border: 1px solid rgba(139,111,71,0.4);
+    padding: 6px 14px;
+    border-radius: 3px;
+    margin-bottom: 22px;
+  }
+  .eyebrow .dot{
+    width:6px;height:6px;background:var(--leaf);
+    box-shadow: 0 0 0 2px rgba(107,155,79,0.25);
+  }
+  h1{
+    font-family: "Courier New", monospace;
+    font-size: clamp(28px, 5vw, 52px);
+    line-height: 1.25;
+    margin: 0 0 18px;
+    color: var(--paper);
+    text-shadow: 3px 3px 0 rgba(0,0,0,0.35);
+    letter-spacing: 0.01em;
+  }
+  h1 .accent{ color: var(--redstone); }
+  header p.lead{
+    max-width: 560px;
+    margin: 0 auto;
+    color: var(--cream-deep);
+    font-size: 16px;
+  }
+
+  /* ---------- 木目ディバイダー ---------- */
+  .plank-divider{
+    height: 14px;
+    background: repeating-linear-gradient(90deg, var(--wood) 0 38px, var(--wood-dark) 38px 40px);
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.35), inset 0 -2px 4px rgba(255,255,255,0.08);
+  }
+
+  main{
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 56px 24px 100px;
+  }
+
+  /* ---------- ワークベンチセクション ---------- */
+  .workbench{
+    background: linear-gradient(180deg, var(--wood) 0%, var(--wood-dark) 100%);
+    border-radius: 10px;
+    padding: 8px;
+    box-shadow: var(--shadow);
+    border: 1px solid rgba(0,0,0,0.25);
+  }
+  .workbench-inner{
+    background: var(--paper);
+    border-radius: 6px;
+    padding: 36px;
+    color: var(--charcoal);
+  }
+  @media (max-width: 640px){
+    .workbench-inner{ padding: 22px; }
+  }
+
+  .step-label{
+    display:flex;
+    align-items:center;
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+  .step-num{
+    font-family:"Courier New",monospace;
+    font-weight:bold;
+    font-size: 14px;
+    width: 30px; height: 30px;
+    display:flex; align-items:center; justify-content:center;
+    background: var(--charcoal);
+    color: var(--paper);
+    border-radius: 4px;
+    flex-shrink:0;
+  }
+  .step-label h2{
+    margin:0;
+    font-size: 20px;
+    font-family: "Courier New", monospace;
+    color: var(--charcoal-soft);
+  }
+  .step-label .sub{
+    font-size: 13px;
+    color:#7a6f5f;
+    margin-top:2px;
+  }
+
+  /* ---------- ドロップゾーン ---------- */
+  #dropzone{
+    border: 3px dashed var(--wood);
+    border-radius: 8px;
+    padding: 40px 20px;
+    text-align:center;
+    cursor:pointer;
+    background: repeating-conic-gradient(var(--cream) 0% 25%, var(--cream-deep) 0% 50%) 50% / 24px 24px;
+    transition: all 0.15s ease;
+    position:relative;
+  }
+  #dropzone:hover, #dropzone.dragover{
+    border-color: var(--redstone);
+    background-color: rgba(194,75,58,0.06);
+  }
+  #dropzone .icon{
+    font-size: 38px;
+    margin-bottom: 10px;
+    display:block;
+  }
+  #dropzone .main-txt{
+    font-weight:bold;
+    font-size: 16px;
+    color: var(--charcoal);
+  }
+  #dropzone .sub-txt{
+    font-size: 13px;
+    color:#7a6f5f;
+    margin-top:6px;
+  }
+  #fileInput{ display:none; }
+
+  /* ---------- アップロード済み画像グリッド ---------- */
+  #fileList{
+    display:grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 16px;
+    margin-top: 24px;
+  }
+  .file-card{
+    background: var(--cream);
+    border: 2px solid var(--wood);
+    border-radius: 6px;
+    padding: 10px;
+    position: relative;
+  }
+  .file-card .thumb-wrap{
+    aspect-ratio: 1/1;
+    border-radius: 4px;
+    overflow:hidden;
+    background:
+      conic-gradient(var(--charcoal-soft) 90deg, #000 90deg 180deg, var(--charcoal-soft) 180deg 270deg, #000 270deg) top left / 16px 16px repeat;
+    margin-bottom: 8px;
+    position: relative;
+  }
+  .file-card .thumb-wrap img{
+    width:100%; height:100%; object-fit:cover; display:block;
+  }
+  .file-card .name-input{
+    width: 100%;
+    font-size: 12px;
+    font-family: "Courier New", monospace;
+    border: 1px solid var(--wood-light);
+    border-radius: 3px;
+    padding: 5px 6px;
+    background: var(--paper);
+    color: var(--charcoal);
+  }
+  .file-card .remove-btn{
+    position:absolute;
+    top: -10px; right: -10px;
+    width: 26px; height:26px;
+    border-radius: 50%;
+    background: var(--redstone);
+    color: white;
+    border: 2px solid var(--paper);
+    cursor:pointer;
+    font-size: 13px;
+    line-height:1;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+  }
+  .file-card .remove-btn:hover{ background: var(--redstone-dark); }
+  .file-card .block-id{
+    font-size: 10px;
+    color:#8a7e6c;
+    margin-top: 4px;
+    font-family: "Courier New", monospace;
+  }
+  .file-card .tex-size-label{
+    font-size: 10px;
+    color: var(--leaf-dark);
+    margin-top: 2px;
+    font-family: "Courier New", monospace;
+  }
+
+  /* ---------- 設定行 ---------- */
+  .field-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap: 20px;
+    margin-top: 24px;
+  }
+  .field{
+    flex: 1 1 220px;
+  }
+  .field label{
+    display:block;
+    font-size: 12px;
+    font-weight:bold;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #6b6052;
+    margin-bottom: 6px;
+  }
+  .field input[type=text]{
+    width:100%;
+    padding: 10px 12px;
+    border: 2px solid var(--wood-light);
+    border-radius: 4px;
+    background: var(--cream);
+    font-size: 14px;
+    color: var(--charcoal);
+    font-family: "Courier New", monospace;
+  }
+  .field input[type=text]:focus{
+    outline:none;
+    border-color: var(--redstone);
+  }
+  .hint{
+    font-size: 12px;
+    color: #8a7e6c;
+    margin-top: 6px;
+  }
+
+  /* ---------- プレビュー(3D風ブロック) ---------- */
+  .preview-section{
+    margin-top: 30px;
+    display:flex;
+    flex-wrap:wrap;
+    gap: 28px;
+    align-items:flex-start;
+  }
+  .block-preview-wrap{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:10px;
+  }
+  .block-preview{
+    width: 140px;
+    height: 140px;
+  }
+  .block-preview .face-name{
+    font-size: 11px;
+    color:#8a7e6c;
+    font-family:"Courier New",monospace;
+  }
+  .preview-note{
+    flex: 1 1 260px;
+    font-size: 13px;
+    color:#6b6052;
+    background: var(--cream);
+    border-left: 4px solid var(--leaf);
+    padding: 14px 16px;
+    border-radius: 4px;
+  }
+  .preview-note strong{ color: var(--charcoal); }
+
+  /* ---------- ビルドボタン ---------- */
+  .build-area{
+    margin-top: 32px;
+    text-align:center;
+  }
+  #buildBtn{
+    font-family:"Courier New",monospace;
+    font-weight:bold;
+    font-size: 17px;
+    letter-spacing: 0.03em;
+    color: var(--paper);
+    background: var(--redstone);
+    border: none;
+    border-bottom: 4px solid var(--redstone-dark);
+    padding: 16px 38px;
+    border-radius: 5px;
+    cursor:pointer;
+    transition: transform 0.08s ease, background 0.15s ease;
+    box-shadow: 0 4px 0 rgba(0,0,0,0.15);
+  }
+  #buildBtn:hover{ background: #d35a48; }
+  #buildBtn:active{ transform: translateY(3px); border-bottom-width:1px; }
+  #buildBtn:disabled{
+    background: #9a9182;
+    border-bottom-color: #7d7565;
+    cursor:not-allowed;
+  }
+  #buildStatus{
+    margin-top: 14px;
+    font-size: 13px;
+    color: #6b6052;
+    min-height: 18px;
+  }
+
+  #downloadArea{
+    margin-top: 22px;
+    display:none;
+  }
+  #downloadArea.show{ display:block; }
+  .download-card{
+    display:inline-flex;
+    align-items:center;
+    gap: 14px;
+    background: var(--leaf);
+    color: white;
+    padding: 16px 26px;
+    border-radius: 6px;
+    text-decoration:none;
+    font-weight:bold;
+    box-shadow: 0 4px 0 var(--leaf-dark);
+    transition: transform 0.08s ease;
+  }
+  .download-card:hover{ transform: translateY(-2px); }
+  .download-card .big{ font-size: 22px; }
+  .download-card .label{ font-size: 14px; text-align:left; line-height:1.3; }
+  .download-card .label small{ display:block; font-weight:normal; opacity:0.85; font-size:11px; }
+
+  /* ---------- 使い方ステップ ---------- */
+  .howto{
+    margin-top: 56px;
+  }
+  .howto h2{
+    font-family:"Courier New",monospace;
+    font-size: 24px;
+    text-align:center;
+    color: var(--paper);
+    margin-bottom: 32px;
+    text-shadow: 2px 2px 0 rgba(0,0,0,0.3);
+  }
+  .howto-grid{
+    display:grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px,1fr));
+    gap: 18px;
+  }
+  .howto-card{
+    background: var(--charcoal-soft);
+    border: 1px solid rgba(139,111,71,0.4);
+    border-radius: 8px;
+    padding: 22px 20px;
+  }
+  .howto-card .hnum{
+    font-family:"Courier New",monospace;
+    color: var(--redstone);
+    font-size: 13px;
+    font-weight:bold;
+    margin-bottom: 8px;
+  }
+  .howto-card h3{
+    margin: 0 0 8px;
+    font-size: 16px;
+    color: var(--paper);
+  }
+  .howto-card p{
+    margin:0;
+    font-size: 13px;
+    color: var(--cream-deep);
+  }
+
+  footer{
+    text-align:center;
+    padding: 30px;
+    font-size: 12px;
+    color: #8a7e6c;
+  }
+
+  .visually-hidden-focusable:focus{
+    outline: 2px solid var(--redstone);
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="eyebrow"><span class="dot"></span>BEDROCK ADDON BUILDER</span>
+  <h1>好きな画像を<br><span class="accent">マイクラのブロック</span>にする。</h1>
+  <p class="lead">画像をアップロードしてビルドするだけ。できあがった .mcaddon をタップすれば、統合版マインクラに新しいブロックとして追加されます。</p>
+</header>
+
+<div class="plank-divider"></div>
+
+<main>
+
+  <div class="workbench">
+    <div class="workbench-inner">
+
+      <!-- STEP 1 -->
+      <div class="step-label">
+        <div class="step-num">1</div>
+        <div>
+          <h2>画像をアップロード</h2>
+          <div class="sub">複数枚まとめてOK。それぞれが別のブロックになります。</div>
+        </div>
+      </div>
+
+      <div id="dropzone">
+        <span class="icon">🖼️</span>
+        <div class="main-txt">クリック、またはドラッグ&ドロップ</div>
+        <div class="sub-txt">PNG / JPEG ・ 複数選択可</div>
+      </div>
+      <input type="file" id="fileInput" accept="image/png,image/jpeg,image/jpg,image/webp" multiple>
+
+      <div id="fileList"></div>
+
+      <!-- STEP 2 -->
+      <div class="step-label" style="margin-top:40px;">
+        <div class="step-num">2</div>
+        <div>
+          <h2>アドオンの名前</h2>
+          <div class="sub">マイクラのアドオン一覧に表示される名前です。</div>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="packName">パック名</label>
+          <input type="text" id="packName" value="フォトブロック" maxlength="40">
+        </div>
+        <div class="field">
+          <label for="packNamespace">名前空間 (半角英数字)</label>
+          <input type="text" id="packNamespace" value="myphoto" maxlength="20">
+          <div class="hint">ブロックIDの接頭辞になります（例: myphoto:photo_1）</div>
+        </div>
+      </div>
+
+      <!-- STEP 3 プレビュー -->
+      <div class="step-label" style="margin-top:40px;">
+        <div class="step-num">3</div>
+        <div>
+          <h2>プレビュー</h2>
+          <div class="sub">正面に画像、側面と上下は木枠になります。</div>
+        </div>
+      </div>
+
+      <div class="preview-section">
+        <div class="block-preview-wrap">
+          <div class="block-preview" id="blockPreview"></div>
+          <span class="face-name">正面 = アップロード画像 / 側面・上下 = 木枠</span>
+        </div>
+        <div class="preview-note">
+          <strong>かたさ・採掘速度は「木材」と同じ</strong>に設定されます。素手でもサクッと壊せて、斧ならさらに速く壊せます。壊すとそのブロック自体がドロップするので、また置き直せます。<br><br>
+          <strong>画像はできるだけぼやけないように</strong>、元画像の解像度に応じてブロックテクスチャの解像度を自動で上げます（最大256×256px）。小さい画像を無理に大きくはしないので、元の画像が高解像度であるほどブロックも綺麗に表示されます。
+        </div>
+      </div>
+
+      <!-- STEP 4 ビルド -->
+      <div class="build-area">
+        <button id="buildBtn" disabled>画像を追加してください</button>
+        <div id="buildStatus"></div>
+        <div id="downloadArea">
+          <a href="#" id="downloadLink" class="download-card">
+            <span class="big">📦</span>
+            <span class="label">.mcaddon をダウンロード<small>タップすればマイクラに追加されます</small></span>
+          </a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="howto">
+    <h2>使い方</h2>
+    <div class="howto-grid">
+      <div class="howto-card">
+        <div class="hnum">STEP 01</div>
+        <h3>画像をアップロード</h3>
+        <p>上のエリアに好きな画像を1枚以上アップロードします。</p>
+      </div>
+      <div class="howto-card">
+        <div class="hnum">STEP 02</div>
+        <h3>ビルドしてダウンロード</h3>
+        <p>「ビルドする」を押すと .mcaddon ファイルが生成され、ダウンロードされます。</p>
+      </div>
+      <div class="howto-card">
+        <div class="hnum">STEP 03</div>
+        <h3>ファイルを開く</h3>
+        <p>ダウンロードした .mcaddon をタップ（スマホ）またはダブルクリック（PC）すると、自動でマインクラフトに読み込まれます。</p>
+      </div>
+      <div class="howto-card">
+        <div class="hnum">STEP 04</div>
+        <h3>ワールドで有効化</h3>
+        <p>新規 / 既存のワールド設定の「リソースパック」「ビヘイビアパック」で、追加されたパックを有効にしてください。</p>
+      </div>
+      <div class="howto-card">
+        <div class="hnum">STEP 05</div>
+        <h3>ブロックを置く</h3>
+        <p>クリエイティブインベントリの「建築」タブ（検索でパック名やblock名を入力）から見つけて設置できます。</p>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer>マインクラフトはMojang Studios / Microsoftの商標です。本ツールは非公式のファン制作物です。</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+/* ============================================================
+   テクスチャ生成
+   - drawFrameTexture: 側面・上下用の木枠テクスチャを描く
+   - drawFrontTexture: アップロード画像を正方形テクスチャに変換
+   ============================================================ */
+
+/**
+ * 木の写真フレーム風テクスチャをCanvasに描いて返す
+ * @param {number} size 出力する正方形のピクセルサイズ
+ * @returns {HTMLCanvasElement}
+ */
+function drawFrameTexture(size){
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  // ベースの木色（少しランダムなノイズで木目っぽさを出す）
+  const base = [139, 111, 71];      // --wood
+  const dark = [91, 68, 48];        // --wood-dark
+  const light = [169, 138, 94];     // --wood-light
+
+  // ベース塗り
+  ctx.fillStyle = `rgb(${base[0]},${base[1]},${base[2]})`;
+  ctx.fillRect(0, 0, size, size);
+
+  // 木目（縦のストライプ + ノイズ）— 簡易疑似ランダム（シード固定で再現性を持たせる）
+  let seed = 42;
+  function rnd(){
+    seed = (seed * 9301 + 49297) % 233280;
+    return seed / 233280;
+  }
+
+  const cell = Math.max(1, Math.floor(size / 32)); // 32x32基準のピクセルブロック単位で塗る
+  for(let y = 0; y < size; y += cell){
+    for(let x = 0; x < size; x += cell){
+      const n = rnd();
+      let c;
+      if(n < 0.18) c = dark;
+      else if(n < 0.32) c = light;
+      else c = base;
+      // 横方向にわずかに濃淡の縞を作る（木目の年輪っぽさ）
+      const stripe = Math.sin((x / size) * Math.PI * 6) * 0.5 + 0.5;
+      const mix = stripe > 0.6 ? dark : c;
+      ctx.fillStyle = `rgb(${mix[0]},${mix[1]},${mix[2]})`;
+      ctx.fillRect(x, y, cell, cell);
+    }
+  }
+
+  // 外枠の太い縁取り（フレームらしさ） — 内側がへこんで見えるよう濃淡をつける
+  const borderW = Math.max(2, Math.round(size * 0.16));
+
+  // 外側の縁: 明るい木
+  ctx.fillStyle = `rgb(${light[0]},${light[1]},${light[2]})`;
+  ctx.fillRect(0, 0, size, borderW); // top
+  ctx.fillRect(0, size - borderW, size, borderW); // bottom
+  ctx.fillRect(0, 0, borderW, size); // left
+  ctx.fillRect(size - borderW, 0, borderW, size); // right
+
+  // 縁の内側に1段濃い影ライン（凹みの表現）
+  const lineW = Math.max(1, Math.round(size * 0.02));
+  ctx.fillStyle = `rgb(${dark[0]},${dark[1]},${dark[2]})`;
+  ctx.fillRect(borderW - lineW, 0, lineW, size);
+  ctx.fillRect(size - borderW, 0, lineW, size);
+  ctx.fillRect(0, borderW - lineW, size, lineW);
+  ctx.fillRect(0, size - borderW, size, lineW);
+
+  // 中央パネル（少し沈んだ色面）
+  const innerSize = size - borderW * 2;
+  ctx.fillStyle = `rgb(${dark[0] + 14},${dark[1] + 10},${dark[2] + 6})`;
+  ctx.fillRect(borderW, borderW, innerSize, innerSize);
+
+  // 四隅にネジ留め風の小さいドット（フレームっぽいディテール）
+  const dotR = Math.max(1, Math.round(size * 0.025));
+  const dotOffset = Math.round(borderW * 0.5);
+  ctx.fillStyle = `rgb(${dark[0] - 20 < 0 ? 0 : dark[0]-20},${dark[1]-15<0?0:dark[1]-15},${dark[2]-10<0?0:dark[2]-10})`;
+  [[dotOffset,dotOffset],[size-dotOffset,dotOffset],[dotOffset,size-dotOffset],[size-dotOffset,size-dotOffset]].forEach(([cx,cy]) => {
+    ctx.beginPath();
+    ctx.arc(cx, cy, dotR, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  return canvas;
+}
+
+/**
+ * アップロード画像を正方形のブロックテクスチャ(中央クロップ＋リサイズ)に変換
+ * @param {HTMLImageElement} img
+ * @param {number} size
+ * @returns {HTMLCanvasElement}
+ */
+function drawFrontTexture(img, size){
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  const iw = img.naturalWidth || img.width;
+  const ih = img.naturalHeight || img.height;
+  const side = Math.min(iw, ih);
+  const sx = (iw - side) / 2;
+  const sy = (ih - side) / 2;
+
+  ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+  return canvas;
+}
+
+/**
+ * Canvas を PNG の Uint8Array(バイナリ)に変換するヘルパー
+ * @param {HTMLCanvasElement} canvas
+ * @returns {Promise<Uint8Array>}
+ */
+function canvasToPngBytes(canvas){
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if(!blob){ reject(new Error('toBlob failed')); return; }
+      const reader = new FileReader();
+      reader.onload = () => resolve(new Uint8Array(reader.result));
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(blob);
+    }, 'image/png');
+  });
+}
+
+
+/* ============================================================
+   .mcaddon ビルダー
+   ビヘイビアパック(BP) + リソースパック(RP) を
+   それぞれ独立した .mcpack (内部的にはZIP) として作り、
+   その2つを格納した外側のZIPを .mcaddon として書き出す。
+   ============================================================ */
+
+function uuid(){
+  if(crypto && crypto.randomUUID) return crypto.randomUUID();
+  // フォールバック（古い環境向け）
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random()*16|0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+const FORMAT_VERSION_BLOCK = '1.21.0';
+const MIN_ENGINE_VERSION = [1, 21, 0];
+
+/**
+ * テクスチャ解像度に応じて terrain_texture.json の padding / mip を決める。
+ * 高解像度になるほどpaddingを大きめに、mipは抑える。
+ */
+function terrainTextureTuning(maxTexSize){
+  if(maxTexSize >= 128) return { padding: 8, num_mip_levels: 0 };
+  if(maxTexSize >= 64)  return { padding: 8, num_mip_levels: 2 };
+  return { padding: 8, num_mip_levels: 4 };
+}
+
+/**
+ * 画像エントリ群とパック設定から .mcaddon の Blob を生成する
+ * @param {Array} entries  state.files と同形式の配列
+ * @param {string} packDisplayName
+ * @param {string} namespace
+ * @param {(msg:string)=>void} onProgress
+ * @returns {Promise<Blob>}
+ */
+async function buildMcaddon(entries, packDisplayName, namespace, onProgress){
+  onProgress && onProgress('テクスチャを生成中…');
+
+  const bpUuidHeader = uuid();
+  const bpUuidModule = uuid();
+  const rpUuidHeader = uuid();
+  const rpUuidModule = uuid();
+
+  const bpZip = new JSZip();
+  const rpZip = new JSZip();
+
+  /* ---------- manifest: behavior_pack ---------- */
+  const bpManifest = {
+    format_version: 2,
+    header: {
+      name: packDisplayName + ' (Behavior)',
+      description: '画像から生成されたフォトブロック・ビヘイビアパック',
+      uuid: bpUuidHeader,
+      version: [1, 0, 0],
+      min_engine_version: MIN_ENGINE_VERSION
+    },
+    modules: [
+      {
+        type: 'data',
+        uuid: bpUuidModule,
+        version: [1, 0, 0]
+      }
+    ],
+    dependencies: [
+      { uuid: rpUuidHeader, version: [1, 0, 0] }
+    ]
+  };
+  bpZip.file('manifest.json', JSON.stringify(bpManifest, null, 2));
+
+  /* ---------- manifest: resource_pack ---------- */
+  const rpManifest = {
+    format_version: 2,
+    header: {
+      name: packDisplayName + ' (Resource)',
+      description: '画像から生成されたフォトブロック・リソースパック',
+      uuid: rpUuidHeader,
+      version: [1, 0, 0],
+      min_engine_version: MIN_ENGINE_VERSION
+    },
+    modules: [
+      {
+        type: 'resources',
+        uuid: rpUuidModule,
+        version: [1, 0, 0]
+      }
+    ]
+  };
+  rpZip.file('manifest.json', JSON.stringify(rpManifest, null, 2));
+
+  /* ---------- 各画像の解像度を決定（一番大きい画像のサイズを記録しておく） ---------- */
+  let globalMaxTexSize = MIN_TEX_SIZE;
+  const sizedEntries = entries.map(entry => {
+    const size = resolveTextureSize(entry.img);
+    if(size > globalMaxTexSize) globalMaxTexSize = size;
+    return { entry, texSize: size };
+  });
+
+  /* ---------- 共通: 木枠テクスチャ（全ブロック共通で1枚だけ作る） ----------
+     枠は一番大きい画像の解像度に合わせておく（正面と枠で解像度が違うと
+     アトラス上で違和感が出るため） */
+  const frameCanvas = drawFrameTexture(globalMaxTexSize);
+  const framePngBytes = await canvasToPngBytes(frameCanvas);
+  rpZip.file('textures/blocks/photo_frame.png', framePngBytes);
+
+  /* ---------- pack_icon（簡易: 1枚目の画像 or 枠デザインを使用） ---------- */
+  const iconSourceImg = entries[0] ? entries[0].img : null;
+  const iconCanvas = iconSourceImg ? drawFrontTexture(iconSourceImg, 64) : drawFrameTexture(64);
+  const iconPngBytes = await canvasToPngBytes(iconCanvas);
+  bpZip.file('pack_icon.png', iconPngBytes);
+  rpZip.file('pack_icon.png', iconPngBytes);
+
+  /* ---------- terrain_texture.json / blocks.json / lang / 各ブロックJSON ---------- */
+  const tuning = terrainTextureTuning(globalMaxTexSize);
+  const terrainTextureData = {
+    resource_pack_name: namespace,
+    texture_name: 'atlas.terrain',
+    padding: tuning.padding,
+    num_mip_levels: tuning.num_mip_levels,
+    texture_data: {}
+  };
+  const blocksJson = {
+    format_version: '1.19.30'
+  };
+  const langLines_ja = ['## フォトブロック'];
+  const langLines_en = ['## Photo Blocks'];
+
+  let i = 0;
+  for(const { entry, texSize } of sizedEntries){
+    i++;
+    onProgress && onProgress(`ブロックを作成中… (${i}/${entries.length}) ${entry.blockName} (${texSize}x${texSize})`);
+
+    const blockName = entry.blockName;          // 例: sunset
+    const identifier = `${namespace}:${blockName}`;
+    const frontTexKey = `${namespace}_${blockName}_front`;
+    const frameTexKey = `${namespace}_photo_frame`;
+
+    // 正面テクスチャを生成して書き出し（画像自身の解像度に合わせる。アップスケールはしない）
+    const frontCanvas = drawFrontTexture(entry.img, texSize);
+    const frontPngBytes = await canvasToPngBytes(frontCanvas);
+    rpZip.file(`textures/blocks/${blockName}_front.png`, frontPngBytes);
+
+    // terrain_texture.json への登録
+    terrainTextureData.texture_data[frontTexKey] = {
+      textures: `textures/blocks/${blockName}_front.png`
+    };
+    if(!terrainTextureData.texture_data[frameTexKey]){
+      terrainTextureData.texture_data[frameTexKey] = {
+        textures: 'textures/blocks/photo_frame.png'
+      };
+    }
+
+    // blocks.json への登録（サウンド指定。テクスチャの実体はBP側のmaterial_instancesが優先される）
+    blocksJson[identifier] = {
+      sound: 'wood'
+    };
+
+    // BP側: ブロック定義 (1ブロック1ファイル)
+    const blockDef = {
+      format_version: FORMAT_VERSION_BLOCK,
+      'minecraft:block': {
+        description: {
+          identifier: identifier,
+          menu_category: {
+            category: 'construction'
+          }
+        },
+        components: {
+          'minecraft:geometry': 'minecraft:geometry.full_block',
+          'minecraft:material_instances': {
+            '*': {
+              texture: frameTexKey,
+              render_method: 'opaque'
+            },
+            north: {
+              texture: frontTexKey,
+              render_method: 'opaque'
+            }
+          },
+          'minecraft:destructible_by_mining': {
+            seconds_to_destroy: 2.0
+          },
+          'minecraft:destructible_by_explosion': {
+            explosion_resistance: 3.0
+          },
+          'minecraft:flammable': {
+            catch_chance_modifier: 5,
+            destroy_chance_modifier: 20
+          },
+          'minecraft:friction': 0.6,
+          'minecraft:map_color': '#8b6f47',
+          'minecraft:loot': `loot_tables/blocks/${blockName}.json`,
+          'tag:minecraft:is_axe_item_destructible': {}
+        }
+      }
+    };
+    bpZip.file(`blocks/${blockName}.json`, JSON.stringify(blockDef, null, 2));
+
+    // BP側: ルートテーブル（壊したらこのブロック自身がドロップ）
+    const lootTable = {
+      pools: [
+        {
+          rolls: 1,
+          entries: [
+            {
+              type: 'item',
+              name: identifier,
+              weight: 1
+            }
+          ]
+        }
+      ]
+    };
+    bpZip.file(`loot_tables/blocks/${blockName}.json`, JSON.stringify(lootTable, null, 2));
+
+    // 言語ファイル用エントリ
+    const displayLabel = entry.displayName.replace(/\.[^/.]+$/, '');
+    langLines_ja.push(`tile.${identifier}.name=${displayLabel}`);
+    langLines_en.push(`tile.${identifier}.name=${displayLabel}`);
+  }
+
+  rpZip.file('textures/terrain_texture.json', JSON.stringify(terrainTextureData, null, 2));
+  rpZip.file('blocks.json', JSON.stringify(blocksJson, null, 2));
+
+  rpZip.file('texts/ja_JP.lang', langLines_ja.join('\n'));
+  rpZip.file('texts/en_US.lang', langLines_en.join('\n'));
+  rpZip.file('texts/languages.json', JSON.stringify(['en_US', 'ja_JP'], null, 2));
+
+  onProgress && onProgress('パックを圧縮中…');
+
+  // BP/RP をそれぞれ .mcpack (実体はZIP) としてバイナリ化
+  const bpPackBytes = await bpZip.generateAsync({ type: 'uint8array', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+  const rpPackBytes = await rpZip.generateAsync({ type: 'uint8array', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+
+  // .mcaddon は、その2つの .mcpack を内包する外側のZIP
+  // ファイル名は namespace（半角英数字に正規化済み）をベースにする。
+  // 日本語など非ASCII文字をファイル名に含めると、一部の環境でインポートに
+  // 失敗することがあるため、内部のmcpackファイル名は安全な文字だけにする。
+  const safeBase = namespace || 'photoblocks';
+  const addonZip = new JSZip();
+  addonZip.file(`${safeBase}_behavior.mcpack`, bpPackBytes);
+  addonZip.file(`${safeBase}_resource.mcpack`, rpPackBytes);
+
+  onProgress && onProgress('ZIPファイルを書き出し中…');
+
+  const blob = await addonZip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+  return blob;
+}
+
+
+/* ============================================================
+   フォトブロック工房 — Bedrock .mcaddon ビルダー
+   ============================================================ */
+
+// ブロックテクスチャの解像度は画像ごとに決める（resolveTextureSize参照）。
+// あまりに大きいとアトラスを圧迫するため上限を設ける。
+const MAX_TEX_SIZE = 256;
+const MIN_TEX_SIZE = 16;
+
+/**
+ * 元画像の解像度に応じて、ブロックテクスチャに使う最適な正方形サイズ(2の累乗)を決める。
+ * 小さい画像を無理に拡大はせず、大きい画像はMAX_TEX_SIZEで頭打ちにする。
+ */
+function resolveTextureSize(img){
+  const iw = img.naturalWidth || img.width || 16;
+  const ih = img.naturalHeight || img.height || 16;
+  const shortSide = Math.min(iw, ih);
+
+  // shortSide 以下になる最大の2の累乗を選ぶ（ぼやけさせない＝必要以上に縮小しない）
+  let size = MIN_TEX_SIZE;
+  while(size * 2 <= shortSide && size * 2 <= MAX_TEX_SIZE){
+    size *= 2;
+  }
+  return size;
+}
+
+const state = {
+  files: [] // { id, name(=block id name), file, dataUrl, img }
+};
+
+let uidCounter = 0;
+function nextUid(){ return 'img_' + (++uidCounter); }
+
+/* ---------------- DOM参照 ---------------- */
+const dropzone   = document.getElementById('dropzone');
+const fileInput  = document.getElementById('fileInput');
+const fileListEl = document.getElementById('fileList');
+const buildBtn    = document.getElementById('buildBtn');
+const buildStatus = document.getElementById('buildStatus');
+const downloadArea = document.getElementById('downloadArea');
+const downloadLink = document.getElementById('downloadLink');
+const blockPreviewEl = document.getElementById('blockPreview');
+const packNameInput = document.getElementById('packName');
+const packNamespaceInput = document.getElementById('packNamespace');
+
+/* ---------------- ドラッグ&ドロップ / 選択 ---------------- */
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('keydown', (e) => {
+  if(e.key === 'Enter' || e.key === ' '){ fileInput.click(); }
+});
+
+['dragenter','dragover'].forEach(evt => {
+  dropzone.addEventListener(evt, (e) => {
+    e.preventDefault();
+    dropzone.classList.add('dragover');
+  });
+});
+['dragleave','drop'].forEach(evt => {
+  dropzone.addEventListener(evt, (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('dragover');
+  });
+});
+dropzone.addEventListener('drop', (e) => {
+  const dt = e.dataTransfer;
+  if(dt && dt.files && dt.files.length){
+    handleFiles(dt.files);
+  }
+});
+fileInput.addEventListener('change', (e) => {
+  if(e.target.files && e.target.files.length){
+    handleFiles(e.target.files);
+  }
+  fileInput.value = '';
+});
+
+/* ---------------- ファイル名 -> ブロックID用の安全な文字列 ---------------- */
+function sanitizeBaseName(filename){
+  let base = filename.replace(/\.[^/.]+$/, ''); // 拡張子除去
+  base = base.toLowerCase();
+  // 半角英数字以外をアンダースコアに
+  base = base.replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+  if(!base) base = 'photo';
+  // 先頭が数字なら p_ をつける（識別子として安全に）
+  if(/^[0-9]/.test(base)) base = 'p_' + base;
+  return base;
+}
+
+function uniqueBlockName(desired){
+  let name = desired;
+  let i = 2;
+  const existing = new Set(state.files.map(f => f.blockName));
+  while(existing.has(name)){
+    name = desired + '_' + i;
+    i++;
+  }
+  return name;
+}
+
+/* ---------------- ファイル取り込み ---------------- */
+function handleFiles(fileListObj){
+  const files = Array.from(fileListObj).filter(f => /^image\//.test(f.type));
+  if(files.length === 0) return;
+
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target.result;
+      const img = new Image();
+      img.onload = () => {
+        const id = nextUid();
+        const base = sanitizeBaseName(file.name);
+        const blockName = uniqueBlockName(base);
+        state.files.push({
+          id, file, dataUrl, img,
+          blockName,
+          displayName: file.name
+        });
+        renderFileList();
+        updateBuildButton();
+        renderBlockPreview();
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ---------------- ファイル一覧UI ---------------- */
+function renderFileList(){
+  fileListEl.innerHTML = '';
+  state.files.forEach(entry => {
+    const card = document.createElement('div');
+    card.className = 'file-card';
+
+    const thumbWrap = document.createElement('div');
+    thumbWrap.className = 'thumb-wrap';
+    const img = document.createElement('img');
+    img.src = entry.dataUrl;
+    img.alt = entry.displayName;
+    thumbWrap.appendChild(img);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'remove-btn';
+    removeBtn.type = 'button';
+    removeBtn.innerHTML = '&times;';
+    removeBtn.title = '削除';
+    removeBtn.addEventListener('click', () => {
+      state.files = state.files.filter(f => f.id !== entry.id);
+      renderFileList();
+      updateBuildButton();
+      renderBlockPreview();
+    });
+    thumbWrap.appendChild(removeBtn);
+
+    const nameInput = document.createElement('input');
+    nameInput.className = 'name-input';
+    nameInput.type = 'text';
+    nameInput.value = entry.blockName;
+    nameInput.maxLength = 24;
+    nameInput.addEventListener('change', () => {
+      let v = sanitizeBaseName(nameInput.value || entry.blockName);
+      // 自分以外との重複を避ける
+      const others = new Set(state.files.filter(f => f.id !== entry.id).map(f => f.blockName));
+      let finalName = v, i = 2;
+      while(others.has(finalName)){ finalName = v + '_' + i; i++; }
+      entry.blockName = finalName;
+      nameInput.value = finalName;
+      renderFileList();
+    });
+
+    const blockId = document.createElement('div');
+    blockId.className = 'block-id';
+
+    const texSizeLabel = document.createElement('div');
+    texSizeLabel.className = 'tex-size-label';
+    const resolvedSize = resolveTextureSize(entry.img);
+    texSizeLabel.textContent = `テクスチャ ${resolvedSize}×${resolvedSize}px`;
+
+    card.appendChild(thumbWrap);
+    card.appendChild(nameInput);
+    card.appendChild(blockId);
+    card.appendChild(texSizeLabel);
+    fileListEl.appendChild(card);
+
+    // namespace変更にも追従させるため、blockIdの文字列は描画時に都度更新
+    updateBlockIdLabel(blockId, entry);
+  });
+}
+
+function updateBlockIdLabel(el, entry){
+  const ns = sanitizeNamespace(packNamespaceInput.value);
+  el.textContent = ns + ':' + entry.blockName;
+}
+
+function refreshAllBlockIdLabels(){
+  const cards = fileListEl.querySelectorAll('.file-card');
+  cards.forEach((card, idx) => {
+    const entry = state.files[idx];
+    const label = card.querySelector('.block-id');
+    if(entry && label) updateBlockIdLabel(label, entry);
+  });
+}
+
+packNamespaceInput.addEventListener('input', () => {
+  refreshAllBlockIdLabels();
+});
+
+function sanitizeNamespace(ns){
+  let v = (ns || 'photo').toLowerCase().replace(/[^a-z0-9_]+/g,'_').replace(/^_+|_+$/g,'');
+  if(!v) v = 'photo';
+  if(/^[0-9]/.test(v)) v = 'p_' + v;
+  return v;
+}
+
+/* ---------------- ビルドボタンの有効/無効 ---------------- */
+function updateBuildButton(){
+  if(state.files.length === 0){
+    buildBtn.disabled = true;
+    buildBtn.textContent = '画像を追加してください';
+  } else {
+    buildBtn.disabled = false;
+    buildBtn.textContent = `ビルドする（${state.files.length}個のブロック）`;
+  }
+}
+
+/* ---------------- ブロックプレビュー（等角投影CSS） ---------------- */
+function renderBlockPreview(){
+  blockPreviewEl.innerHTML = '';
+  const sample = state.files[0];
+
+  const wrap = document.createElement('div');
+  wrap.style.width = '100%';
+  wrap.style.height = '100%';
+  wrap.style.position = 'relative';
+  wrap.style.perspective = '600px';
+
+  const cube = document.createElement('div');
+  cube.style.width = '100%';
+  cube.style.height = '100%';
+  cube.style.position = 'relative';
+  cube.style.transformStyle = 'preserve-3d';
+  cube.style.transform = 'rotateX(-22deg) rotateY(35deg)';
+
+  const frameImg = sample ? frameTextureDataUrl() : frameTextureDataUrl();
+  const frontImg = sample ? sample.dataUrl : frameTextureDataUrl();
+
+  const size = 140;
+  const faces = [
+    { name:'front',  tex: frontImg, transform: `translateZ(${size/2}px)` },
+    { name:'top',    tex: frameImg, transform: `rotateX(90deg) translateZ(${size/2}px)`, brightness:1.15 },
+    { name:'right',  tex: frameImg, transform: `rotateY(90deg) translateZ(${size/2}px)`, brightness:0.8 },
+  ];
+
+  faces.forEach(f => {
+    const face = document.createElement('div');
+    face.style.position = 'absolute';
+    face.style.width = size + 'px';
+    face.style.height = size + 'px';
+    face.style.left = '0'; face.style.top = '0';
+    face.style.backgroundImage = `url(${f.tex})`;
+    face.style.backgroundSize = 'cover';
+    face.style.imageRendering = 'pixelated';
+    face.style.transform = f.transform;
+    face.style.filter = f.brightness ? `brightness(${f.brightness})` : '';
+    face.style.border = '1px solid rgba(0,0,0,0.15)';
+    cube.appendChild(face);
+  });
+
+  wrap.appendChild(cube);
+  blockPreviewEl.appendChild(wrap);
+}
+
+/* 枠テクスチャをプレビュー用にCanvasで作って dataURL を返す（簡易キャッシュ） */
+let _frameCache = null;
+function frameTextureDataUrl(){
+  if(_frameCache) return _frameCache;
+  const canvas = drawFrameTexture(128);
+  _frameCache = canvas.toDataURL('image/png');
+  return _frameCache;
+}
+
+packNameInput.addEventListener('input', () => {});
+
+/* ---------------- ビルド処理 ---------------- */
+buildBtn.addEventListener('click', async () => {
+  if(state.files.length === 0) return;
+
+  buildBtn.disabled = true;
+  downloadArea.classList.remove('show');
+  buildStatus.textContent = '準備中…';
+
+  try{
+    const packName = (packNameInput.value || 'フォトブロック').trim();
+    const namespace = sanitizeNamespace(packNamespaceInput.value);
+
+    const blob = await buildMcaddon(state.files, packName, namespace, (msg) => {
+      buildStatus.textContent = msg;
+    });
+
+    const url = URL.createObjectURL(blob);
+    const fileBaseName = sanitizeBaseName(packName) || 'photoblocks';
+    downloadLink.href = url;
+    downloadLink.download = `${fileBaseName}.mcaddon`;
+
+    buildStatus.textContent = `完成！ ${state.files.length}個のブロックを作成しました。`;
+    downloadArea.classList.add('show');
+  } catch(err){
+    console.error(err);
+    buildStatus.textContent = 'エラーが発生しました: ' + (err && err.message ? err.message : err);
+  } finally {
+    buildBtn.disabled = false;
+  }
+});
+
+renderBlockPreview();
+updateBuildButton();
+
+</script>
+</body>
+</html>
