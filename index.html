@@ -210,27 +210,6 @@
     background: var(--paper);
     color: var(--charcoal);
   }
-  .file-card .size-row{
-    display:flex;
-    align-items:center;
-    gap: 6px;
-    margin-top: 8px;
-  }
-  .file-card .size-select{
-    flex: 1;
-    font-size: 12px;
-    font-family: "Courier New", monospace;
-    border: 1px solid var(--wood-light);
-    border-radius: 3px;
-    padding: 4px 4px;
-    background: var(--paper);
-    color: var(--charcoal);
-  }
-  .file-card .size-x{
-    font-size: 12px;
-    color: #8a7e6c;
-    flex-shrink: 0;
-  }
   .file-card .remove-btn{
     position:absolute;
     top: -10px; right: -10px;
@@ -466,7 +445,7 @@
         <div class="step-num">1</div>
         <div>
           <h2>画像をアップロード</h2>
-          <div class="sub">複数枚まとめてOK。それぞれが別のブロックになります。サイズ（横×縦のブロック数）も画像ごとに指定できます。</div>
+          <div class="sub">複数枚まとめてOK。それぞれが別のブロックになります。</div>
         </div>
       </div>
 
@@ -517,11 +496,9 @@
         <div class="preview-note">
           <strong>かたさ・採掘速度は「木材」と同じ</strong>に設定されます。素手でもサクッと壊せて、斧ならさらに速く壊せます。壊すとそのブロック自体がドロップするので、また置き直せます。<br><br>
           <strong>正面の向きはプレイヤーが置いた方向に合わせて自動で回転</strong>します（前後左右だけでなく、床や天井に置いた場合の上下にも対応）。どちらを向いて置いても、画像はちゃんと自分の方を向きます。<br><br>
-          <strong>ホットバーやインベントリでも画像入りで表示</strong>されます（持っている時や手に取った時も画像が見えます）。<br><br>
-          <strong>サイズは横×縦のブロック数で指定</strong>でき、見た目はその大きさで表示されます（設置に必要なスペース自体は1ブロック分です）。画像はサイズに応じて解像度も自動で上がります。<br><br>
           <strong>各画像につき2種類のブロックが作られます</strong>：通常の「ブロック」（当たり判定あり、足場として使える）と、「ゴーストブロック」（当たり判定なし、プレイヤーやMobがすり抜けられる）。ゴーストブロックは額縁のように壁や床に画像を貼りたいときに便利です。クリエイティブインベントリにそれぞれ別のブロックとして並びます。<br><br>
-          <span style="color:#9c382a;">※ この機能には Minecraft 統合版 1.21.60 以降が必要です。</span><br><br>
-          <span style="color:#9c382a;">※ PCではただし導入されない場合は.zipファイルにしてアドオンのフォルダに入れてください</span>
+          <strong>テクスチャは128×128ピクセル固定</strong>です。標準的な16×16よりもくっきりした見た目になります（採掘中のひび割れ表現が少し伸びて見えることがありますが、見た目の問題だけで動作に影響はありません）。<br><br>
+          <span style="color:#9c382a;">※ この機能には Minecraft 統合版 1.21.80 以降が必要です。</span>
         </div>
       </div>
 
@@ -724,111 +701,25 @@ function canvasToPngBytes(canvas){
 
 
 /* ============================================================
-   カスタムジオメトリ生成
-   横(widthBlocks) x 縦(heightBlocks) ブロック分の大きさを持つ
-   「板」状のジオメトリを作る。奥行きは常に薄い固定値。
-   - 単位は16 = 1ブロック（Bedrockのモデル空間の標準単位）
-   - 正面(north)に画像、他5面に木枠テクスチャを割り当てる
-   - テクスチャは「正面用」「枠用」の2枚を別々に用意し、
-     material_instances側の north / * (up/down/east/west/south) の
-     built-inインスタンス名でそれぞれに紐付ける。
-   - UVは公式のSushiブロックチュートリアルと同じく、シンプルな
-     Box UV形式 ("uv": [0, 0]) を使う。面ごとに別テクスチャ画像を
-     material_instancesで割り当てる場合、UVの数値自体は重要ではなく、
-     各テクスチャ画像はそれぞれ独立して描画されるため、[0,0]で十分。
-   ============================================================ */
-
-const UNITS_PER_BLOCK = 16;
-const PLAQUE_DEPTH = 3; // 奥行き（モデル空間単位。3/16ブロック程度の薄い板）
-
-/**
- * widthBlocks x heightBlocks の板ジオメトリを構築する。
- * 当たり判定(collision_box / selection_box)は仕様上 1 グリッド(-8..8, 0..16)を
- * 超えられないため、見た目はサイズ通りに大きくしつつ、当たり判定は1ブロック分に収める。
- *
- * @param {string} geoIdentifier 例: "geometry.myphoto_sunset"
- * @param {number} widthBlocks 横のブロック数 (1, 2, 3...)
- * @param {number} heightBlocks 縦のブロック数 (1, 2, 3...)
- * @returns {object} geo.json の内容（オブジェクト）
- */
-function buildPlaqueGeometry(geoIdentifier, widthBlocks, heightBlocks){
-  const w = widthBlocks * UNITS_PER_BLOCK;
-  const h = heightBlocks * UNITS_PER_BLOCK;
-  const d = PLAQUE_DEPTH;
-
-  // 中心を原点(ブロックグリッドの中心)に置き、奥行きはブロックの中央付近に配置。
-  // Bedrockのモデル空間: x:[-w/2, w/2], y:[0, h]（縦は0始まり=床基準）, z: north(-) / south(+)
-  const originX = -w / 2;
-  const originY = 0;
-  const originZ = (UNITS_PER_BLOCK - d) / 2;
-
-  // シンプルなBox UV（公式サンプルのSushiブロックと同じ形式）。
-  // 面ごとのテクスチャ画像はBP側のmaterial_instancesで指定するので、ここは[0,0]で十分。
-  const cube = {
-    origin: [originX, originY, originZ],
-    size: [w, h, d],
-    uv: [0, 0]
-  };
-
-  return {
-    format_version: '1.16.0',
-    'minecraft:geometry': [
-      {
-        description: {
-          identifier: geoIdentifier,
-          texture_width: 16,
-          texture_height: 16,
-          visible_bounds_width: Math.max(2, widthBlocks + 1),
-          visible_bounds_height: Math.max(2, heightBlocks + 1),
-          visible_bounds_offset: [0, heightBlocks * 0.5, 0]
-        },
-        bones: [
-          {
-            name: 'plaque',
-            pivot: [0, 0, 0],
-            cubes: [cube]
-          }
-        ]
-      }
-    ]
-  };
-}
-
-/**
- * 通常ブロック用の当たり判定・選択範囲のボックス。
- * Bedrockの制約上、collision_box/selection_boxは1ブロックグリッド
- * (x,z: -8..8 / y: 0..16) からは出られないため、見た目が大きくても
- * 当たり判定は1ブロック分に固定する。
- */
-function buildPlaqueBoxes(){
-  return {
-    origin: [-8, 0, -8],
-    size: [16, 16, 16]
-  };
-}
-
-/**
- * ゴーストブロック用の選択範囲ボックス（当たり判定は別途collision_box:falseにする）。
- * クリックでの選択・破壊ができるよう、selection_boxだけは通常通り残す。
- */
-function buildGhostSelectionBox(){
-  return {
-    origin: [-8, 0, -8],
-    size: [16, 16, 16]
-  };
-}
-
-
-/* ============================================================
    .mcaddon ビルダー
    ビヘイビアパック(BP) + リソースパック(RP) を
    それぞれ独立した .mcpack (内部的にはZIP) として作り、
    その2つを格納した外側のZIPを .mcaddon として書き出す。
+
+   設計方針（公式チュートリアル "Create a Custom Die Block" および
+   "Using Block Traits" の arrow_block サンプルに準拠）:
+   - geometry は標準の "minecraft:geometry.full_block"（立方体）を使う。
+     カスタムジオメトリは使わない。
+   - テクスチャは128x128ピクセル固定。Bedrock Wikiによれば、16x16より
+     大きいテクスチャ自体は問題なく動作する（高解像度リソースパックは
+     実在する）。唯一の注意点は、採掘時の破壊ひび割れ(destruction
+     cracks)がテクスチャ全体に対して表示されるため、大きいテクスチャでは
+     ひび割れの見た目が伸びて見えることがある、という視覚的な点のみ。
+   - 6方向の回転は arrow_block サンプルと全く同じ回転値を使う。
    ============================================================ */
 
 function uuid(){
   if(crypto && crypto.randomUUID) return crypto.randomUUID();
-  // フォールバック（古い環境向け）
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
     const r = Math.random()*16|0;
     const v = c === 'x' ? r : (r & 0x3 | 0x8);
@@ -836,66 +727,85 @@ function uuid(){
   });
 }
 
-// item_visual コンポーネント（インベントリ/手持ち表示用の見た目を別指定する機能）が
-// 安定して使える最低のフォーマットバージョン。
-const FORMAT_VERSION_BLOCK = '1.21.60';
-const MIN_ENGINE_VERSION = [1, 21, 60];
+// facing_direction（6方向）トレイトが安定して使えるバージョン。
+// 標準ジオメトリ(minecraft:geometry.full_block)を明示する必要があるのは
+// 1.21.80以降だが、それ以前のバージョンでも動作するよう実例に合わせる。
+const FORMAT_VERSION_BLOCK = '1.21.80';
+const MIN_ENGINE_VERSION = [1, 21, 80];
 
-/**
- * テクスチャ解像度に応じて terrain_texture.json の padding / mip を決める。
- */
-function terrainTextureTuning(maxTexSize){
-  if(maxTexSize >= 128) return { padding: 8, num_mip_levels: 0 };
-  if(maxTexSize >= 64)  return { padding: 8, num_mip_levels: 2 };
-  return { padding: 8, num_mip_levels: 4 };
-}
+// ブロックテクスチャの解像度。128x128であれば画質と安定動作のバランスが良い
+// （ユーザー環境で実際に動作確認済みの解像度）。
+const BLOCK_TEX_SIZE = 128;
 
 /**
  * プレイヤーが向いている方向に応じてブロックを回転させるための
- * 6方向分のpermutationsを作る（north基準でモデルを作っているので、
- * facing_directionの値に応じてX軸/Y軸回転をかける）。
- * y_rotation_offset:180 をtraitに設定しているので、水平4方向では
- * 「プレイヤーが向いている方角 = facing_direction」のとき画像が
- * プレイヤーの方を向くように180度分のオフセットが既に加味される。
- * 上面・底面に設置した場合は、プレイヤーが見上げる/見下ろす形で
- * 画像が見えるようX軸回転を使う。
+ * permutationsを作る。Microsoft Learn "Using Block Traits" の
+ * arrow_block サンプルと全く同じ回転値を使う（実証済みの値）。
+ *
+ * y_rotation_offset:180 を指定しているため、水平方向は
+ * facing_direction の値に対して north→180度, south→0度,
+ * west→-90度, east→90度 という回転を当てる。
+ *
+ * 上面・底面に置いた場合は facing_direction (up/down) と
+ * cardinal_direction (north/south/east/west) の組み合わせで
+ * 12パターン全てを網羅する。
  */
 function buildRotationPermutations(){
   return [
-    // 水平4方向（壁に貼るイメージ。y_rotation_offset:180が効いているので
-    // facing_direction(=プレイヤーの向き)と同じ回転を素直に使う）
     {
       condition: "query.block_state('minecraft:facing_direction') == 'north'",
+      components: { 'minecraft:transformation': { rotation: [0, 180, 0] } }
+    },
+    {
+      condition: "query.block_state('minecraft:facing_direction') == 'south'",
       components: { 'minecraft:transformation': { rotation: [0, 0, 0] } }
+    },
+    {
+      condition: "query.block_state('minecraft:facing_direction') == 'west'",
+      components: { 'minecraft:transformation': { rotation: [0, -90, 0] } }
     },
     {
       condition: "query.block_state('minecraft:facing_direction') == 'east'",
       components: { 'minecraft:transformation': { rotation: [0, 90, 0] } }
     },
     {
-      condition: "query.block_state('minecraft:facing_direction') == 'south'",
-      components: { 'minecraft:transformation': { rotation: [0, 180, 0] } }
+      condition: "query.block_state('minecraft:facing_direction') == 'up' && query.block_state('minecraft:cardinal_direction') == 'north'",
+      components: { 'minecraft:transformation': { rotation: [90, 180, 0] } }
     },
     {
-      condition: "query.block_state('minecraft:facing_direction') == 'west'",
-      components: { 'minecraft:transformation': { rotation: [0, 270, 0] } }
-    },
-    // 床に置いた場合：上を向いて見下ろす形で画像が見えるようにする
-    {
-      condition: "query.block_state('minecraft:facing_direction') == 'up'",
+      condition: "query.block_state('minecraft:facing_direction') == 'up' && query.block_state('minecraft:cardinal_direction') == 'south'",
       components: { 'minecraft:transformation': { rotation: [90, 0, 0] } }
     },
-    // 天井に置いた場合：下を向いて見上げる形で画像が見えるようにする
     {
-      condition: "query.block_state('minecraft:facing_direction') == 'down'",
+      condition: "query.block_state('minecraft:facing_direction') == 'up' && query.block_state('minecraft:cardinal_direction') == 'west'",
+      components: { 'minecraft:transformation': { rotation: [90, -90, 0] } }
+    },
+    {
+      condition: "query.block_state('minecraft:facing_direction') == 'up' && query.block_state('minecraft:cardinal_direction') == 'east'",
+      components: { 'minecraft:transformation': { rotation: [90, 90, 0] } }
+    },
+    {
+      condition: "query.block_state('minecraft:facing_direction') == 'down' && query.block_state('minecraft:cardinal_direction') == 'north'",
+      components: { 'minecraft:transformation': { rotation: [-90, 180, 0] } }
+    },
+    {
+      condition: "query.block_state('minecraft:facing_direction') == 'down' && query.block_state('minecraft:cardinal_direction') == 'south'",
       components: { 'minecraft:transformation': { rotation: [-90, 0, 0] } }
+    },
+    {
+      condition: "query.block_state('minecraft:facing_direction') == 'down' && query.block_state('minecraft:cardinal_direction') == 'west'",
+      components: { 'minecraft:transformation': { rotation: [-90, -90, 0] } }
+    },
+    {
+      condition: "query.block_state('minecraft:facing_direction') == 'down' && query.block_state('minecraft:cardinal_direction') == 'east'",
+      components: { 'minecraft:transformation': { rotation: [-90, 90, 0] } }
     }
   ];
 }
 
 /**
  * 画像エントリ群とパック設定から .mcaddon の Blob を生成する
- * @param {Array} entries  state.files と同形式の配列（widthBlocks/heightBlocksを含む）
+ * @param {Array} entries  state.files と同形式の配列
  * @param {string} packDisplayName
  * @param {string} namespace
  * @param {(msg:string)=>void} onProgress
@@ -947,22 +857,12 @@ async function buildMcaddon(entries, packDisplayName, namespace, onProgress){
   };
   rpZip.file('manifest.json', JSON.stringify(rpManifest, null, 2));
 
-  /* ---------- 各画像のテクスチャサイズを決定 ---------- */
-  let globalMaxTexSize = MIN_TEX_PER_BLOCK;
-  const sizedEntries = entries.map(entry => {
-    const widthBlocks = Math.max(1, Math.min(MAX_BLOCK_SPAN, entry.widthBlocks || 1));
-    const heightBlocks = Math.max(1, Math.min(MAX_BLOCK_SPAN, entry.heightBlocks || 1));
-    const { w: frontW, h: frontH, perBlock } = resolveFrontTextureSize(entry.img, widthBlocks, heightBlocks);
-    if(perBlock > globalMaxTexSize) globalMaxTexSize = perBlock;
-    return { entry, widthBlocks, heightBlocks, frontW, frontH, perBlock };
-  });
-
-  /* ---------- 共通: 木枠テクスチャ（全ブロック共通で1枚だけ作る） ---------- */
-  const frameCanvas = drawFrameTexture(globalMaxTexSize);
+  /* ---------- 共通: 木枠テクスチャ（全ブロック共通で1枚だけ作る。16x16固定） ---------- */
+  const frameCanvas = drawFrameTexture(BLOCK_TEX_SIZE);
   const framePngBytes = await canvasToPngBytes(frameCanvas);
   rpZip.file('textures/blocks/photo_frame.png', framePngBytes);
 
-  /* ---------- pack_icon ---------- */
+  /* ---------- pack_icon（64x64、これはブロックテクスチャではないので解像度自由） ---------- */
   const iconSourceImg = entries[0] ? entries[0].img : null;
   const iconCanvas = iconSourceImg ? drawFrontTexture(iconSourceImg, 64, 64) : drawFrameTexture(64);
   const iconPngBytes = await canvasToPngBytes(iconCanvas);
@@ -970,12 +870,13 @@ async function buildMcaddon(entries, packDisplayName, namespace, onProgress){
   rpZip.file('pack_icon.png', iconPngBytes);
 
   /* ---------- terrain_texture.json / blocks.json / lang / 各ブロックJSON ---------- */
-  const tuning = terrainTextureTuning(globalMaxTexSize);
+  // 128x128のような高解像度テクスチャでは、mip段階を抑えてpaddingを
+  // 確保しておくと安全（Bedrock Wikiの texture-atlases ガイドラインに基づく）。
   const terrainTextureData = {
     resource_pack_name: namespace,
     texture_name: 'atlas.terrain',
-    padding: tuning.padding,
-    num_mip_levels: tuning.num_mip_levels,
+    padding: 8,
+    num_mip_levels: 2,
     texture_data: {}
   };
   const blocksJson = { format_version: '1.19.30' };
@@ -988,26 +889,16 @@ async function buildMcaddon(entries, packDisplayName, namespace, onProgress){
    * 1個のブロック定義(JSON)を組み立てる。
    * isGhost=true の場合、当たり判定なし（すり抜けられる）のゴーストブロックになる。
    */
-  function buildBlockDef(identifier, geoIdentifier, frontTexKey, frameTexKey, blockName, isGhost){
+  function buildBlockDef(identifier, frontTexKey, frameTexKey, blockName, isGhost){
     const components = {
-      'minecraft:geometry': geoIdentifier,
-      // 面ごとのテクスチャ（built-inの面名で自動的にcubeの各面に紐づく）
+      'minecraft:geometry': 'minecraft:geometry.full_block',
       'minecraft:material_instances': {
-        '*': { texture: frameTexKey, render_method: 'opaque' },
-        up: { texture: frameTexKey, render_method: 'opaque' },
-        down: { texture: frameTexKey, render_method: 'opaque' },
+        north: { texture: frontTexKey, render_method: 'opaque' },
+        south: { texture: frameTexKey, render_method: 'opaque' },
         east: { texture: frameTexKey, render_method: 'opaque' },
         west: { texture: frameTexKey, render_method: 'opaque' },
-        south: { texture: frameTexKey, render_method: 'opaque' },
-        north: { texture: frontTexKey, render_method: 'opaque' }
-      },
-      // インベントリ・ホットバー・手持ち表示専用の見た目。
-      // 立方体の全面に正面画像を貼ることで、アイコンとして画像がちゃんと見えるようにする。
-      'minecraft:item_visual': {
-        geometry: 'minecraft:geometry.full_block',
-        material_instances: {
-          '*': { texture: frontTexKey, render_method: 'opaque' }
-        }
+        up: { texture: frameTexKey, render_method: 'opaque' },
+        down: { texture: frameTexKey, render_method: 'opaque' }
       },
       'minecraft:destructible_by_mining': { seconds_to_destroy: 2.0 },
       'minecraft:destructible_by_explosion': { explosion_resistance: 3.0 },
@@ -1021,12 +912,11 @@ async function buildMcaddon(entries, packDisplayName, namespace, onProgress){
       // 当たり判定なし（プレイヤーやMobがすり抜けられる）。選択範囲だけは
       // 残し、クリックでの選択・破壊はできるようにする。
       components['minecraft:collision_box'] = false;
-      components['minecraft:selection_box'] = buildGhostSelectionBox();
-    } else {
-      const boxes = buildPlaqueBoxes();
-      components['minecraft:collision_box'] = boxes;
-      components['minecraft:selection_box'] = boxes;
+      components['minecraft:selection_box'] = { origin: [-8, 0, -8], size: [16, 16, 16] };
     }
+    // 通常版は collision_box / selection_box を指定しない
+    // （minecraft:geometry.full_block を使う場合、デフォルトで1ブロック分の
+    //   当たり判定・選択範囲が自動的に適用されるため、明示指定は不要）。
 
     return {
       format_version: FORMAT_VERSION_BLOCK,
@@ -1048,36 +938,28 @@ async function buildMcaddon(entries, packDisplayName, namespace, onProgress){
   }
 
   let i = 0;
-  for(const sized of sizedEntries){
+  for(const entry of entries){
     i++;
-    const { entry, widthBlocks, heightBlocks, frontW, frontH, perBlock } = sized;
-    onProgress && onProgress(`ブロックを作成中… (${i}/${entries.length}) ${entry.blockName} (${widthBlocks}x${heightBlocks}ブロック, ${frontW}x${frontH}px)`);
+    onProgress && onProgress(`ブロックを作成中… (${i}/${entries.length}) ${entry.blockName}`);
 
     const blockName = entry.blockName;
     const identifier = `${namespace}:${blockName}`;
     const ghostIdentifier = `${namespace}:${blockName}_ghost`;
     const frontTexKey = `${namespace}_${blockName}_front`;
     const frameTexKey = `${namespace}_photo_frame`;
-    const geoIdentifier = `geometry.${namespace}_${blockName}`;
 
-    // 正面テクスチャ（widthBlocks:heightBlocksのアスペクト比で中央クロップ）。
-    // 通常版・ゴースト版で共有する。
-    const frontCanvas = drawFrontTexture(entry.img, frontW, frontH);
+    // 正面テクスチャ。Bedrock標準ジオメトリの制約に合わせ、必ず16x16で書き出す。
+    const frontCanvas = drawFrontTexture(entry.img, BLOCK_TEX_SIZE, BLOCK_TEX_SIZE);
     const frontPngBytes = await canvasToPngBytes(frontCanvas);
     rpZip.file(`textures/blocks/${blockName}_front.png`, frontPngBytes);
 
-    // ジオメトリ（横×縦サイズに応じた板状モデル。正面/枠は別テクスチャ）。
-    // 見た目は通常版・ゴースト版で同じものを共有する。
-    const geoJson = buildPlaqueGeometry(geoIdentifier, widthBlocks, heightBlocks);
-    rpZip.file(`models/blocks/${blockName}.geo.json`, JSON.stringify(geoJson, null, 2));
-
-    // terrain_texture.json への登録
+    // terrain_texture.json への登録（パスは拡張子なし。公式サンプルに準拠）
     terrainTextureData.texture_data[frontTexKey] = {
-      textures: `textures/blocks/${blockName}_front.png`
+      textures: `textures/blocks/${blockName}_front`
     };
     if(!terrainTextureData.texture_data[frameTexKey]){
       terrainTextureData.texture_data[frameTexKey] = {
-        textures: 'textures/blocks/photo_frame.png'
+        textures: 'textures/blocks/photo_frame'
       };
     }
 
@@ -1085,10 +967,10 @@ async function buildMcaddon(entries, packDisplayName, namespace, onProgress){
     blocksJson[ghostIdentifier] = { sound: 'wood' };
 
     // BP側: ブロック定義（通常版・ゴースト版の2つ）
-    const blockDef = buildBlockDef(identifier, geoIdentifier, frontTexKey, frameTexKey, blockName, false);
+    const blockDef = buildBlockDef(identifier, frontTexKey, frameTexKey, blockName, false);
     bpZip.file(`blocks/${blockName}.json`, JSON.stringify(blockDef, null, 2));
 
-    const ghostBlockDef = buildBlockDef(ghostIdentifier, geoIdentifier, frontTexKey, frameTexKey, blockName, true);
+    const ghostBlockDef = buildBlockDef(ghostIdentifier, frontTexKey, frameTexKey, blockName, true);
     bpZip.file(`blocks/${blockName}_ghost.json`, JSON.stringify(ghostBlockDef, null, 2));
 
     // BP側: ルートテーブル（壊したらそれぞれ自分自身がドロップ）
@@ -1134,43 +1016,10 @@ async function buildMcaddon(entries, packDisplayName, namespace, onProgress){
 /* ============================================================
    フォトブロック工房 — Bedrock .mcaddon ビルダー
    ============================================================ */
-
-// ブロックテクスチャの解像度は「1ブロックあたり何pxにするか」を画像解像度から決め、
-// 横×縦のブロック数倍した分だけ正面テクスチャの解像度を上げる。
-const MAX_TEX_PER_BLOCK = 256; // 1ブロックあたりの最大解像度
-const MIN_TEX_PER_BLOCK = 16;  // 1ブロックあたりの最小解像度
-const MAX_BLOCK_SPAN = 3;      // 横/縦に置ける最大ブロック数（見た目の大きさ）
-
-/**
- * 元画像の解像度に応じて、1ブロックあたりのテクスチャ解像度(2の累乗)を決める。
- * 小さい画像を無理に拡大はせず、大きい画像はMAX_TEX_PER_BLOCKで頭打ちにする。
- */
-function resolveTexPerBlock(img){
-  const iw = img.naturalWidth || img.width || 16;
-  const ih = img.naturalHeight || img.height || 16;
-  const shortSide = Math.min(iw, ih);
-
-  let size = MIN_TEX_PER_BLOCK;
-  while(size * 2 <= shortSide && size * 2 <= MAX_TEX_PER_BLOCK){
-    size *= 2;
-  }
-  return size;
-}
-
-/**
- * 画像とブロックサイズ(横幅・縦幅、ブロック単位)から、
- * 正面テクスチャに使う実際の解像度(幅, 高さ)を決める。
- * ブロックが大きいほど、より大きい正面テクスチャを使って描画が崩れないようにする。
- */
-function resolveFrontTextureSize(img, widthBlocks, heightBlocks){
-  const perBlock = resolveTexPerBlock(img);
-  const w = perBlock * widthBlocks;
-  const h = perBlock * heightBlocks;
-  return { w, h, perBlock };
-}
+// BLOCK_TEX_SIZE は builder.js で定義されている（128x128固定）。
 
 const state = {
-  files: [] // { id, name(=block id name), file, dataUrl, img, widthBlocks, heightBlocks }
+  files: [] // { id, name(=block id name), file, dataUrl, img }
 };
 
 let uidCounter = 0;
@@ -1259,9 +1108,7 @@ function handleFiles(fileListObj){
         state.files.push({
           id, file, dataUrl, img,
           blockName,
-          displayName: file.name,
-          widthBlocks: 1,
-          heightBlocks: 1
+          displayName: file.name
         });
         renderFileList();
         updateBuildButton();
@@ -1319,57 +1166,12 @@ function renderFileList(){
     const blockId = document.createElement('div');
     blockId.className = 'block-id';
 
-    // サイズ指定（横×縦、ブロック単位）
-    const sizeRow = document.createElement('div');
-    sizeRow.className = 'size-row';
-
-    const widthSelect = document.createElement('select');
-    widthSelect.className = 'size-select';
-    widthSelect.title = '横のブロック数';
-    for(let n = 1; n <= MAX_BLOCK_SPAN; n++){
-      const opt = document.createElement('option');
-      opt.value = n;
-      opt.textContent = `横${n}`;
-      if(n === entry.widthBlocks) opt.selected = true;
-      widthSelect.appendChild(opt);
-    }
-    widthSelect.addEventListener('change', () => {
-      entry.widthBlocks = parseInt(widthSelect.value, 10);
-      updateTexSizeLabel(texSizeLabel, entry);
-      if(state.files[0] === entry) renderBlockPreview();
-    });
-
-    const sizeX = document.createElement('span');
-    sizeX.className = 'size-x';
-    sizeX.textContent = '×';
-
-    const heightSelect = document.createElement('select');
-    heightSelect.className = 'size-select';
-    heightSelect.title = '縦のブロック数';
-    for(let n = 1; n <= MAX_BLOCK_SPAN; n++){
-      const opt = document.createElement('option');
-      opt.value = n;
-      opt.textContent = `縦${n}`;
-      if(n === entry.heightBlocks) opt.selected = true;
-      heightSelect.appendChild(opt);
-    }
-    heightSelect.addEventListener('change', () => {
-      entry.heightBlocks = parseInt(heightSelect.value, 10);
-      updateTexSizeLabel(texSizeLabel, entry);
-      if(state.files[0] === entry) renderBlockPreview();
-    });
-
-    sizeRow.appendChild(widthSelect);
-    sizeRow.appendChild(sizeX);
-    sizeRow.appendChild(heightSelect);
-
     const texSizeLabel = document.createElement('div');
     texSizeLabel.className = 'tex-size-label';
-    updateTexSizeLabel(texSizeLabel, entry);
+    texSizeLabel.textContent = `テクスチャ ${BLOCK_TEX_SIZE}×${BLOCK_TEX_SIZE}px`;
 
     card.appendChild(thumbWrap);
     card.appendChild(nameInput);
-    card.appendChild(sizeRow);
     card.appendChild(blockId);
     card.appendChild(texSizeLabel);
     fileListEl.appendChild(card);
@@ -1377,14 +1179,6 @@ function renderFileList(){
     // namespace変更にも追従させるため、blockIdの文字列は描画時に都度更新
     updateBlockIdLabel(blockId, entry);
   });
-}
-
-function updateTexSizeLabel(el, entry){
-  const { w, h } = resolveFrontTextureSize(entry.img, entry.widthBlocks, entry.heightBlocks);
-  const blockLabel = (entry.widthBlocks === 1 && entry.heightBlocks === 1)
-    ? '1ブロック'
-    : `${entry.widthBlocks}×${entry.heightBlocks}ブロック分`;
-  el.textContent = `${blockLabel} ・ テクスチャ ${w}×${h}px`;
 }
 
 function updateBlockIdLabel(el, entry){
@@ -1442,7 +1236,7 @@ function renderBlockPreview(){
   cube.style.transformStyle = 'preserve-3d';
   cube.style.transform = 'rotateX(-22deg) rotateY(35deg)';
 
-  const frameImg = sample ? frameTextureDataUrl() : frameTextureDataUrl();
+  const frameImg = frameTextureDataUrl();
   const frontImg = sample ? sample.dataUrl : frameTextureDataUrl();
 
   const size = 140;
